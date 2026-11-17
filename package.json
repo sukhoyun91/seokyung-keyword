@@ -1,0 +1,28 @@
+{
+  "name": "seokyung-keyword",
+  "version": "1.0.0",
+  "private": true,
+  "description": "서경방송 마케팅팀 AI 검색 키워드 추출·네이버 검색량 정렬 프로그램",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:init": "node scripts/init-db.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.60.0",
+    "@neondatabase/serverless": "^1.0.0",
+    "bcryptjs": "^3.0.2",
+    "exceljs": "^4.4.0",
+    "jose": "^6.0.11",
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^5.8.0"
+  }
+}
