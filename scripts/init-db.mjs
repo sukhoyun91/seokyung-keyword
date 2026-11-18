@@ -25,7 +25,11 @@ const schema = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8'
 for (const stmt of schema.split(';').map((s) => s.replace(/--.*$/gm, '').trim()).filter(Boolean)) {
   await sql.query(stmt);
 }
-console.log('✔ 테이블 생성 완료');
+const adsSchema = readFileSync(new URL('../db/schema-ads.sql', import.meta.url), 'utf8');
+for (const stmt of adsSchema.split(';').map((s) => s.replace(/--.*$/gm, '').trim()).filter(Boolean)) {
+  await sql.query(stmt);
+}
+console.log('✔ 테이블 생성 완료 (키워드 분석 + 검색광고 보고서)');
 
 if (username && password) {
   if (password.length < 8) {

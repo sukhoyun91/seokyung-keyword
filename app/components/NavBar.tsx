@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import type { SessionUser } from '@/lib/auth';
 
-export default function NavBar({ user, active }: { user: SessionUser; active: 'home' | 'admin' }) {
+export default function NavBar({ user, active }: { user: SessionUser; active: 'home' | 'admin' | 'ads' }) {
   const [pwOpen, setPwOpen] = useState(false);
 
   async function logout() {
@@ -14,8 +14,9 @@ export default function NavBar({ user, active }: { user: SessionUser; active: 'h
     <>
       <nav className="nav no-print">
         <div className="nav-inner">
-          <span className="logo">서경방송<small>키워드 분석</small></span>
-          <a href="/" className={active === 'home' ? 'active' : ''}>분석</a>
+          <span className="logo">서경방송<small>마케팅 도구</small></span>
+          <a href="/" className={active === 'home' ? 'active' : ''}>키워드 분석</a>
+          <a href="/ads" className={active === 'ads' ? 'active' : ''}>검색광고 보고서</a>
           {user.role === 'admin' && <a href="/admin" className={active === 'admin' ? 'active' : ''}>관리자</a>}
           <span className="spacer" />
           <span className="who">{user.name}{user.role === 'admin' ? ' (관리자)' : ''}</span>
