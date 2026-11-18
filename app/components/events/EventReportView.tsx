@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../ads/fmt';
 import { KIND_LABEL, STEP_LABEL, TRUST_LABEL, type EvReport, type EvSource, type StepKey, type Trust } from '@/lib/events/types';
 
-const STEPS: StepKey[] = ['tour', 'gov', 'news', 'summarize'];
+const STEPS: StepKey[] = ['tour', 'std', 'gov', 'news', 'summarize'];
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const TRUST_CLS: Record<Trust, string> = { official: 'low', cross: 'ai', check: 'mid' };
 
@@ -49,7 +49,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
 
   /** 대기 중인 단계를 순서대로 실행 (하나 실패해도 다음 출처는 계속, 정리는 수집이 하나라도 되면 실행) */
   async function runPending(rep: EvReport, only?: StepKey) {
-    const todo = only ? [only] : STEPS.filter((k) => ['pending', 'running'].includes(rep.steps[k]?.status ?? 'pending'));
+    const todo = only ? [only] : STEPS.filter((k) => rep.steps[k] && ['pending', 'running'].includes(rep.steps[k]!.status));
     for (const k of todo) {
       setRunning(k);
       try {
@@ -65,7 +65,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
   useEffect(() => {
     load().then((j) => {
       if (!j || started.current) return;
-      const pending = STEPS.some((k) => (j.steps[k]?.status ?? 'pending') === 'pending');
+      const pending = STEPS.some((k) => j.steps[k] && j.steps[k]!.status === 'pending');
       if (autoRun && pending) {
         started.current = true;
         runPending(j);
@@ -153,7 +153,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
           <span><b>작성일</b> {new Date(r.created_at).toLocaleDateString('ko-KR')} ({r.created_by_name})</span>
           <span><b>지역</b> {r.regions.join(', ')}</span>
           <span><b>검색어</b> {r.keywords.join(', ')}</span>
-          <span><b>수집 자료</b> 관광공사 {byKind('tour')} · 지자체 {byKind('gov')} · 뉴스 {byKind('news')}</span>
+          <span><b>수집 자료</b> 관광공사 {byKind('tour')} · 표준데이터 {byKind('std')} · 지자체 {byKind('gov')} · 뉴스 {byKind('news')}</span>
         </div>
         <details className="collect-log no-print">
           <summary>수집 내역 보기</summary>
@@ -165,6 +165,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
                 <li key={k}>
                   <b>{STEP_LABEL[k]}</b>: {st.status === 'done' ? `${st.count ?? 0}건` : st.status === 'skipped' ? '사용 안 함' : st.status === 'error' ? '오류' : '대기'}
                   {st.message ? ` — ${st.message}` : ''}
+                  {k === 'gov' && st.debug && <GovDebug d={st.debug} />}
                 </li>
               );
             })}
@@ -177,7 +178,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
         <section className="rp-sec no-print">
           <h2>수집 진행</h2>
           <div className="steps">
-            {STEPS.map((k) => {
+            {STEPS.filter((k) => k !== 'std' || r.steps.std).map((k) => {
               const st = r.steps[k] ?? { status: 'pending' };
               const isRun = running === k;
               return (
@@ -204,7 +205,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
             <h2><span className="no">1</span>요약</h2>
             <div className="kpis">
               <div className="kpi"><div className="kpi-label">수집된 행사</div><div className="kpi-v">{events.length}건</div><div className="kpi-d">제외 {res.excluded.length}건</div></div>
-              <div className="kpi"><div className="kpi-label">공식 확인</div><div className="kpi-v" style={{ color: 'var(--ok)' }}>{count('official')}</div><div className="kpi-d">관광공사·지자체 근거</div></div>
+              <div className="kpi"><div className="kpi-label">공식 확인</div><div className="kpi-v" style={{ color: 'var(--ok)' }}>{count('official')}</div><div className="kpi-d">관광공사·표준데이터·지자체 근거</div></div>
               <div className="kpi"><div className="kpi-label">복수 출처</div><div className="kpi-v" style={{ color: 'var(--brand)' }}>{count('cross')}</div><div className="kpi-d">서로 다른 언론 2곳 이상</div></div>
               <div className="kpi"><div className="kpi-label">확인 필요</div><div className="kpi-v" style={{ color: 'var(--warn)' }}>{count('check')}</div><div className="kpi-d">출처 1곳·날짜 미확인</div></div>
               <div className="kpi"><div className="kpi-label">출처 간 차이</div><div className="kpi-v">{res.conflicts.length}</div><div className="kpi-d">아래 검증 메모 참고</div></div>
@@ -258,7 +259,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
               </div>
             )}
             <p className="hint">
-              <b>공식 확인</b> 관광공사 공식 정보 또는 지자체 사이트 원문에서 날짜 확인 · <b>복수 출처</b> 서로 다른 언론 2곳 이상, 원문에서 날짜 확인 · <b>확인 필요</b> 출처 1곳뿐이거나 원문에서 날짜를 직접 확인하지 못함
+              <b>공식 확인</b> 관광공사·문화축제 표준데이터 공식 정보 또는 지자체 사이트 원문에서 날짜 확인 · <b>복수 출처</b> 서로 다른 언론 2곳 이상, 원문에서 날짜 확인 · <b>확인 필요</b> 출처 1곳뿐이거나 원문에서 날짜를 직접 확인하지 못함
             </p>
           </section>
 
@@ -334,6 +335,47 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+const FETCH_LABEL: Record<string, string> = { ok: '행사 문장 있음', irrelevant: '관련 문장 없음', fail: '열기 실패', skip: '확인 안 함' };
+
+/** 지자체 검색 과정 기록: 검색어별 결과 수, 찾은 페이지, AI 답변 */
+function GovDebug({ d }: { d: any }) {
+  return (
+    <div className="gov-debug">
+      <div><b>AI가 사용한 검색어</b></div>
+      {d.queries?.length ? (
+        <ul>
+          {d.queries.map((q: any, i: number) => (
+            <li key={i}>
+              "{q.q}" → {q.error ? <span style={{ color: 'var(--err)' }}>오류 {q.error}</span> : `${q.results}건`}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>검색을 하지 않았습니다 (AI가 검색 없이 답함).</p>
+      )}
+      <div><b>찾은 페이지 {d.urls?.length ?? 0}건</b></div>
+      {d.urls?.length ? (
+        <table className="rp-table compact">
+          <thead><tr><th>페이지</th><th>AI 인용</th><th>직접 확인</th></tr></thead>
+          <tbody>
+            {d.urls.map((u: any) => (
+              <tr key={u.url}>
+                <td><a href={u.url} target="_blank" rel="noreferrer">{u.title || u.url}</a><div className="hint" style={{ wordBreak: 'break-all' }}>{u.url}</div></td>
+                <td>{u.cited ? '✓' : '-'}</td>
+                <td>{FETCH_LABEL[u.fetched] ?? u.fetched}{u.note ? <div className="hint">{u.note}</div> : null}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p>검색 결과로 나온 지자체 페이지가 없습니다. 검색 엔진에 해당 사이트 페이지가 거의 잡히지 않거나, 도메인 설정이 다를 수 있습니다.</p>
+      )}
+      <div><b>AI 답변</b></div>
+      <pre>{d.aiText || '(없음)'}</pre>
     </div>
   );
 }

@@ -3,7 +3,8 @@ import { getSettings } from '@/lib/settings';
 import { pingClaude } from '@/lib/claude';
 import { fetchKeywordStats } from '@/lib/naver';
 import { findRank, parseAreas, EXPOSURE_AREAS, normalizeTarget } from '@/lib/exposure';
-import { collectTour, tourDiagText } from '@/lib/events/sources';
+import { collectTour, tourDiagText, collectStd, stdDiagText, collectGov, govDiagText, domainsFor } from '@/lib/events/sources';
+import { fetchSite } from '@/lib/site';
 
 export const runtime = 'nodejs';
 
@@ -63,14 +64,49 @@ export async function POST(req: Request) {
         const end = new Date(Date.now() + (9 * 3600 + 60 * 86400) * 1000).toISOString().slice(0, 10);
         const regions = s.region_list.split(',').map((x) => x.trim()).filter(Boolean);
         const { sources: found, diag } = await collectTour({ serviceKey: s.tour_api_key, start: today, end, regions });
+        let stdLine = '';
+        try {
+          const st = await collectStd({ serviceKey: s.tour_api_key, start: today, end, regions });
+          stdLine = `[문화축제 표준데이터] ${st.sources.length}건 — ${stdDiagText(st.diag)}${st.diag.sample[0] ? ` / 예: ${st.diag.sample[0]}` : ''}`;
+        } catch (e: any) {
+          stdLine = `[문화축제 표준데이터] 실패: ${e?.message ?? e}`;
+        }
         const lines = [
-          `연결 성공 — 앞으로 60일간 설정 지역 축제 ${found.length}건${found[0] ? ` (예: ${found[0].title})` : ''}`,
+          `[TourAPI] 연결 성공 — 앞으로 60일간 설정 지역 축제 ${found.length}건${found[0] ? ` (예: ${found[0].title})` : ''}`,
           tourDiagText(diag),
+          stdLine,
           diag.gyeongnam ? `경남 자료 주소 예시: ${diag.sampleAddrs.slice(0, 5).join(' / ')}` : `받은 자료 예시: ${diag.sampleOther.join(' / ') || '없음'}`,
         ];
         return Response.json({ ok: true, message: lines.join('\n') });
       } catch (e: any) {
         return Response.json({ ok: false, message: `연결 실패: ${e?.message ?? e}` });
+      }
+    }
+    if (target === 'gov') {
+      if (!s.anthropic_api_key) return Response.json({ ok: false, message: 'Claude API 키를 먼저 저장하세요.' });
+      const region = s.region_list.split(',').map((x) => x.trim()).filter(Boolean)[0] || '진주';
+      const domains = domainsFor(s.gov_domains, [region]);
+      if (!domains.length) return Response.json({ ok: false, message: `${region}의 지자체 도메인이 설정에 없습니다.` });
+      const now = new Date(Date.now() + 9 * 3600_000);
+      const ms = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      const me = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 0));
+      const start = ms.toISOString().slice(0, 10), end = me.toISOString().slice(0, 10);
+      try {
+        const { diag } = await collectGov({
+          apiKey: s.anthropic_api_key, model: s.claude_model || 'claude-haiku-5-5', start, end, regions: [region], keywords: ['축제', '행사'],
+          domains, maxUses: 3, timeBudgetMs: 45_000,
+          fetchPage: async (url) => { const p = await fetchSite(url); return `${p.title} ${p.headings.join(' ')} ${p.text}`; },
+        });
+        const lines = [
+          `${region} · ${start}~${end} · 검색 도메인: ${domains.map((d) => d.domain).join(', ')}`,
+          govDiagText(diag),
+          `검색어: ${diag.queries.map((q) => `"${q.q}"→${q.error ? `오류 ${q.error}` : `${q.results}건`}`).join(', ') || '검색 안 함'}`,
+          ...diag.urls.slice(0, 6).map((u) => `· ${u.title} [${u.fetched}${u.note ? `: ${u.note}` : ''}] ${u.url}`),
+          `AI 답변: ${diag.aiText.replace(/\s+/g, ' ').slice(0, 300)}`,
+        ];
+        return Response.json({ ok: diag.urls.length > 0, message: lines.join('\n') });
+      } catch (e: any) {
+        return Response.json({ ok: false, message: `실패: ${e?.message ?? e}` });
       }
     }
     return Response.json({ ok: false, message: '알 수 없는 대상' }, { status: 400 });

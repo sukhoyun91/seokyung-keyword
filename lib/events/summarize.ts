@@ -45,7 +45,7 @@ const TOOL: Anthropic.Messages.Tool = {
 };
 
 function sourceBlock(s: EvSource) {
-  const head = `[${s.id}] (${s.kind === 'tour' ? '관광공사 공식' : s.kind === 'gov' ? `지자체 ${s.publisher}` : `뉴스 ${s.publisher}`}${s.date ? `, 게시 ${s.date}` : ''}) ${s.title}`;
+  const head = `[${s.id}] (${s.kind === 'tour' ? '관광공사 공식' : s.kind === 'std' ? `문화축제 표준데이터 ${s.publisher}` : s.kind === 'gov' ? `지자체 ${s.publisher}` : `뉴스 ${s.publisher}`}${s.date ? `, 게시 ${s.date}` : ''}) ${s.title}`;
   return `${head}\n${s.snippet}`.slice(0, 900);
 }
 
@@ -74,7 +74,7 @@ ${opts.extra ? `- 담당자 요청: ${opts.extra}` : ''}
 1. 모든 정보는 [수집 자료]에 실제로 적힌 내용만 씁니다. 자료에 없는 날짜·장소·주최를 추측해 채우지 않습니다. 모르면 빈 칸으로 둡니다.
 2. 행사마다 근거 출처 번호(source_ids)를 반드시 답니다. 날짜를 확인한 출처를 맨 앞에 둡니다.
 3. 같은 행사를 다룬 여러 출처는 하나의 행사로 합치고 출처 번호를 모두 답니다.
-4. 관광공사 공식 자료와 기사·지자체 자료의 날짜·장소가 다르면 conflicts에 적습니다. 연기·취소 기사가 있으면 note에 씁니다.
+4. 관광공사·표준데이터(공식) 자료와 기사·지자체 자료의 날짜·장소가 다르면 conflicts에 적습니다. 표준데이터에 '작년 일정만 있음'이라고 된 축제는 올해 날짜를 추측하지 말고 start_date를 비우고 note에 적습니다. 연기·취소 기사가 있으면 note에 씁니다.
 5. 지난 행사 결과 기사(이미 끝난 행사)나 기간 밖 행사는 events에 넣지 않습니다.
 6. 행사는 아니지만 홍보에 참고할 기사(지역 관광 동향, 예산, 신규 시설 등)는 related에 최대 10개까지 넣습니다.
 7. overview는 이 기간 지역 행사 흐름을 3~5문장으로 요약합니다(보고서 문체: ~임, ~됨).

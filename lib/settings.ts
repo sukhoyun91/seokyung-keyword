@@ -20,7 +20,7 @@ export const SETTING_DEFS = {
     default: 'iscs.co.kr',
   },
   exposure_areas: { label: '노출 순위 확인 영역(blog, webkr, cafearticle 중 쉼표 구분)', secret: false, default: 'blog,webkr' },
-  tour_api_key: { label: '공공데이터포털 TourAPI 인증키 (일반 인증키 Decoding)', secret: true, default: '' },
+  tour_api_key: { label: '공공데이터포털 일반 인증키 (TourAPI·문화축제 표준데이터 공용)', secret: true, default: '' },
   gov_domains: {
     label: '지자체 웹사이트 (지역:도메인, 줄마다 하나)',
     secret: false,

@@ -149,6 +149,109 @@ export const tourDiagText = (d: TourDiag) =>
   `${d.strategy}: 받은 자료 ${d.fetched}건(전체 ${d.total}) → 경남 ${d.gyeongnam} → 선택 지역 ${d.region} → 기간 내 ${d.inPeriod}`;
 
 // ─────────────────────────────────────────────
+// 1-2) 전국문화축제표준데이터 (공공데이터포털, 지자체 등록)
+// ─────────────────────────────────────────────
+export interface StdDiag {
+  total: number;
+  fetched: number;
+  gyeongnam: number;
+  region: number;
+  inPeriod: number;
+  lastYear: number;
+  sample: string[];
+}
+
+/** "2026-12-01" / "20261201" / "2026.12.01" → "2026-12-01" */
+function anyYmd(v: unknown) {
+  const m = String(v ?? '').match(/(20\d{2})\s*[-./년]?\s*(\d{1,2})\s*[-./월]?\s*(\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : '';
+}
+const shiftYear = (d: string, n: number) => (d ? `${Number(d.slice(0, 4)) + n}${d.slice(4)}` : d);
+
+export async function collectStd(opts: { serviceKey: string; start: string; end: string; regions: string[] }): Promise<{ sources: Omit<EvSource, 'id'>[]; diag: StdDiag }> {
+  const key = opts.serviceKey.includes('%') ? opts.serviceKey : encodeURIComponent(opts.serviceKey.trim());
+  const ROWS = 1000;
+  const all: Record<string, any>[] = [];
+  let total = 0;
+  for (let page = 1; page <= 10; page++) {
+    const url = `https://api.data.go.kr/openapi/tn_pubr_public_cltur_fstvl_api?serviceKey=${key}&pageNo=${page}&numOfRows=${ROWS}&type=json`;
+    const res = await fetch(url, { cache: 'no-store' });
+    const text = await res.text();
+    if (!res.ok || text.trim().startsWith('<')) {
+      if (/SERVICE_KEY|SERVICE KEY|인증|등록되지/.test(text)) throw new Error('문화축제 표준데이터 인증키 오류입니다. 공공데이터포털에서 이 데이터의 활용 신청이 승인됐는지 확인하세요.');
+      if (/NODATA|데이터없음/i.test(text)) break;
+      throw new Error(`문화축제 표준데이터 응답 오류 (${res.status}): ${stripTags(text).slice(0, 150)}`);
+    }
+    const j = JSON.parse(text);
+    const header = j?.response?.header;
+    const code = String(header?.resultCode ?? '00');
+    if (code === '03') break; // 데이터 없음
+    if (!['00', '0', '0000'].includes(code)) throw new Error(`문화축제 표준데이터 오류: ${header?.resultMsg} (${code})`);
+    const body = j?.response?.body;
+    let items = body?.items?.item ?? body?.items ?? [];
+    if (!Array.isArray(items)) items = items && typeof items === 'object' ? [items] : [];
+    total = Number(body?.totalCount ?? 0);
+    all.push(...items.map(lowerKeys));
+    if (page * ROWS >= total || !items.length) break;
+  }
+  const diag: StdDiag = { total, fetched: all.length, gyeongnam: 0, region: 0, inPeriod: 0, lastYear: 0, sample: [] };
+  const out: Omit<EvSource, 'id'>[] = [];
+  const seen = new Set<string>();
+  for (const it of all) {
+    const addr = `${it.rdnmadr ?? ''} ${it.lnmadr ?? ''}`.trim();
+    const where = `${addr} ${it.instt_nm ?? ''} ${it.opar ?? ''}`;
+    if (diag.sample.length < 5) diag.sample.push(`${stripTags(it.fstvlnm)} | ${it.instt_nm ?? ''} | ${it.fstvlstartdate ?? ''}`);
+    if (!/경상남도|경남/.test(where)) continue;
+    diag.gyeongnam++;
+    const title = stripTags(it.fstvlnm);
+    const region = opts.regions.find((r) => regionNames(r).some((n) => where.includes(n) || title.includes(n)));
+    if (!region) continue;
+    diag.region++;
+    const s = anyYmd(it.fstvlstartdate);
+    const e = anyYmd(it.fstvlenddate) || s;
+    let lastYear = false;
+    if (!overlaps(s, e, opts.start, opts.end)) {
+      // 데이터가 아직 올해 일정으로 갱신되지 않은 경우: 작년 같은 시기 축제는 참고로 포함 (공식 날짜로는 쓰지 않음)
+      if (overlaps(shiftYear(s, 1), shiftYear(e, 1), opts.start, opts.end)) lastYear = true;
+      else continue;
+    }
+    if (lastYear) diag.lastYear++;
+    else diag.inPeriod++;
+    const k = `${title}|${s}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const organizer = [it.auspcinsttnm, it.mnnstnm].map((x) => stripTags(x)).filter(Boolean).join(' / ');
+    const homepage = String(it.homepageurl ?? '').trim();
+    out.push({
+      kind: 'std',
+      title,
+      url: /^https?:\/\//.test(homepage) ? homepage : `https://www.data.go.kr/data/15013104/standard.do`,
+      publisher: stripTags(it.instt_nm) || '전국문화축제표준데이터',
+      date: anyYmd(it.referencedate),
+      snippet: [
+        `${title} / 기간 ${s} ~ ${e}${lastYear ? ` (※ 데이터에는 작년 일정만 있음. 올해 일정 미확인)` : ''}`,
+        `장소 ${stripTags(it.opar)}${addr ? ` (${addr})` : ''}`,
+        organizer ? `주최·주관 ${organizer}` : '',
+        it.fstvlco ? `내용 ${stripTags(it.fstvlco).slice(0, 400)}` : '',
+        it.phonenumber ? `문의 ${stripTags(it.phonenumber)}` : '',
+      ].filter(Boolean).join(' / '),
+      region,
+      eventStart: lastYear ? undefined : s,
+      eventEnd: lastYear ? undefined : e,
+      addr: addr || stripTags(it.opar),
+      tel: stripTags(it.phonenumber ?? ''),
+      organizer,
+      homepage,
+      lastYear,
+    });
+  }
+  return { sources: out, diag };
+}
+
+export const stdDiagText = (d: StdDiag) =>
+  `받은 자료 ${d.fetched}건(전체 ${d.total}) → 경남 ${d.gyeongnam} → 선택 지역 ${d.region} → 기간 내 ${d.inPeriod}${d.lastYear ? ` (+작년 같은 시기 ${d.lastYear}건, 올해 일정 미확인)` : ''}`;
+
+// ─────────────────────────────────────────────
 // 2) 네이버 뉴스 검색 (NAVER API HUB)
 // ─────────────────────────────────────────────
 function pubToYmd(s: string) {
@@ -226,8 +329,51 @@ export async function collectNews(opts: {
 }
 
 // ─────────────────────────────────────────────
-// 3) 지자체 웹사이트 — Claude 웹 검색 (지자체 도메인으로 제한)
+// 3) 지자체 웹사이트 — Claude 웹 검색 (지자체 도메인으로 제한) + 결과 페이지 직접 확인
 // ─────────────────────────────────────────────
+export interface GovDiag {
+  searches: number;
+  queries: { q: string; results: number; error?: string }[];
+  urls: { url: string; title: string; cited: boolean; fetched: 'ok' | 'fail' | 'skip' | 'irrelevant'; note?: string }[];
+  aiText: string; // AI 답변 (앞부분)
+  kept: number;
+}
+
+/** 페이지 본문에서 행사 관련 부분만 뽑기: 검색 기간의 월이 나오는 곳 주변 글자 중 행사 관련 단어가 있는 부분 */
+export function relevantExcerpt(text: string, months: number[], keywords: string[], max = 1500) {
+  const t = text.replace(/\s+/g, ' ');
+  const monthRe = new RegExp(`(^|[^0-9])(${months.join('|')})\\s*(월|[./]\\s*\\d{1,2}(?![0-9]))`, 'g');
+  const kwRe = new RegExp([...keywords.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '행사', '축제', '공연', '전시', '개최', '열린다', '운영', '체험', '음악회', '대회'].join('|'));
+  const ranges: [number, number][] = [];
+  let m: RegExpExecArray | null;
+  while ((m = monthRe.exec(t)) && ranges.length < 60) {
+    const a = Math.max(0, m.index - 120);
+    const b = Math.min(t.length, m.index + 180);
+    if (!kwRe.test(t.slice(a, b))) continue;
+    const last = ranges[ranges.length - 1];
+    if (last && a <= last[1]) last[1] = b;
+    else ranges.push([a, b]);
+  }
+  let out = '';
+  for (const [a, b] of ranges) {
+    const piece = t.slice(a, b).trim();
+    if (out.length + piece.length > max) break;
+    out += (out ? ' … ' : '') + piece;
+  }
+  return out;
+}
+
+function monthsBetween(start: string, end: string) {
+  const out: number[] = [];
+  const d = new Date(`${start.slice(0, 7)}-01T00:00:00Z`);
+  const e = new Date(`${end.slice(0, 7)}-01T00:00:00Z`);
+  while (d <= e && out.length < 12) {
+    out.push(d.getUTCMonth() + 1);
+    d.setUTCMonth(d.getUTCMonth() + 1);
+  }
+  return out;
+}
+
 export async function collectGov(opts: {
   apiKey: string;
   model: string;
@@ -237,14 +383,24 @@ export async function collectGov(opts: {
   keywords: string[];
   domains: { domain: string; region: string }[];
   maxUses: number;
-}): Promise<{ sources: Omit<EvSource, 'id'>[]; searches: number }> {
+  fetchPage?: (url: string) => Promise<string>; // 페이지 본문 가져오기 (서버에서 주입)
+  timeBudgetMs?: number;
+}): Promise<{ sources: Omit<EvSource, 'id'>[]; searches: number; diag: GovDiag }> {
+  const t0 = Date.now();
+  const budget = opts.timeBudgetMs ?? 50_000;
   const client = new Anthropic({ apiKey: opts.apiKey });
-  const prompt = `${opts.start} ~ ${opts.end} 기간에 경상남도 ${opts.regions.join(', ')}에서 열리거나 진행 중인 ${opts.keywords.join(', ')} 정보를 지자체(시청·군청·도청) 공식 웹사이트에서 찾으세요.
+  const months = monthsBetween(opts.start, opts.end);
+  const monthWords = months.map((m) => `${m}월`).join('·');
+  const prompt = `${opts.start} ~ ${opts.end} 기간(${monthWords})에 경상남도 ${opts.regions.join(', ')}에서 열리거나 진행 중인 ${opts.keywords.join(', ')} 정보를 지자체·문화기관 공식 웹사이트에서 찾으세요.
 
-- 시·군별로 "축제", "행사 일정", "문화행사", "공지사항" 페이지를 검색하세요.
+검색 방법
+- 시·군마다 따로 검색하세요. 예: "${opts.regions[0]} ${months[0]}월 ${opts.keywords[0]}", "${opts.regions[0]} ${opts.keywords[0]} 일정", "${opts.regions[0]} 문화행사 ${months[0]}월", "${opts.regions[0]} 공연 전시 안내"
+- 검색 결과가 없으면 검색어를 짧게 바꿔 다시 검색하세요.
+
+답변 형식
 - 찾은 행사마다 한 줄씩: 행사명 | 기간(원문 표기 그대로) | 장소 | 주최 | 한 줄 설명
 - 기간이 위 기간과 겹치지 않는 행사는 쓰지 마세요.
-- 웹 페이지에서 확인한 내용만 쓰고, 추측하지 마세요. 찾지 못했으면 "찾지 못함"이라고 쓰세요.`;
+- 웹 페이지에서 확인한 내용만 쓰고 추측하지 마세요. 못 찾은 시·군은 "찾지 못함"이라고 쓰세요.`;
 
   const tools: any[] = [
     {
@@ -263,9 +419,11 @@ export async function collectGov(opts: {
     try {
       msg = await client.messages.create({ model: opts.model, max_tokens: 4000, tools, messages } as any);
     } catch (e: any) {
-      if (e?.status === 400 && /web search/i.test(e?.message ?? '')) throw new Error('Claude 웹 검색이 꺼져 있습니다. Claude Console의 설정에서 웹 검색을 허용하세요.');
+      const m = String(e?.message ?? e);
+      if (e?.status === 400 && /web search|web_search/i.test(m) && /enable|disabled|not allowed/i.test(m)) throw new Error('Claude 웹 검색이 꺼져 있습니다. Claude Console(platform.claude.com) 설정에서 웹 검색을 허용하세요.');
+      if (e?.status === 400 && /domain/i.test(m)) throw new Error(`지자체 도메인 설정 오류: ${m}`);
       if (e?.status === 401) throw new Error('Claude API 키가 올바르지 않습니다.');
-      throw new Error(`Claude 웹 검색 오류: ${e?.message ?? e}`);
+      throw new Error(`Claude 웹 검색 오류: ${m}`);
     }
     content.push(...msg.content);
     searches += Number(msg.usage?.server_tool_use?.web_search_requests ?? 0);
@@ -273,7 +431,25 @@ export async function collectGov(opts: {
     messages.push({ role: 'assistant', content: msg.content });
   }
 
-  // 출처 정리: 인용(cited_text)이 있는 페이지 우선, 검색 결과 페이지도 목록에 포함
+  // ── 검색 기록 정리 (검색어 → 결과 수 / 오류)
+  const diag: GovDiag = { searches, queries: [], urls: [], aiText: '', kept: 0 };
+  const qById = new Map<string, { q: string; results: number; error?: string }>();
+  for (const b of content) {
+    if (b.type === 'server_tool_use' && b.name === 'web_search') {
+      const q = { q: String(b.input?.query ?? ''), results: 0 };
+      qById.set(b.id, q);
+      diag.queries.push(q);
+    }
+    if (b.type === 'web_search_tool_result') {
+      const q = qById.get(b.tool_use_id);
+      if (Array.isArray(b.content)) {
+        if (q) q.results = b.content.filter((r: any) => r.type === 'web_search_result').length;
+      } else if (b.content?.error_code && q) q.error = b.content.error_code;
+    }
+  }
+  diag.aiText = content.filter((b) => b.type === 'text').map((b) => b.text).join('').slice(0, 1500);
+
+  // ── 출처 후보: 검색 결과 전체 (인용 여부와 상관없이)
   const byUrl = new Map<string, Omit<EvSource, 'id'> & { quotes: string[]; claims: string[] }>();
   const add = (url: string, title: string, pageAge?: string) => {
     if (!url) return null;
@@ -301,14 +477,63 @@ export async function collectGov(opts: {
       }
     }
   }
-  const sources = [...byUrl.values()]
-    .filter((s) => s.quotes.length || s.claims.length)
-    .map(({ quotes, claims, ...s }) => ({
+
+  // ── 검색 결과 페이지를 직접 열어 행사 관련 문장 추출 (AI 인용이 없어도 근거 확보)
+  const list = [...byUrl.values()];
+  const pageText = new Map<string, string>();
+  const status = new Map<string, GovDiag['urls'][number]['fetched']>();
+  const notes = new Map<string, string>();
+  if (opts.fetchPage) {
+    const queue = list.slice(0, 15);
+    let qi = 0;
+    const worker = async () => {
+      while (qi < queue.length) {
+        const s = queue[qi++];
+        if (Date.now() - t0 > budget) {
+          status.set(s.url, 'skip');
+          notes.set(s.url, '시간 제한으로 건너뜀');
+          continue;
+        }
+        try {
+          const text = await opts.fetchPage!(s.url);
+          const ex = relevantExcerpt(text, months, opts.keywords);
+          if (ex) {
+            pageText.set(s.url, ex);
+            status.set(s.url, 'ok');
+          } else {
+            status.set(s.url, 'irrelevant');
+            notes.set(s.url, `본문 ${text.length}자 중 ${monthWords} 행사 문장 없음`);
+          }
+        } catch (e: any) {
+          status.set(s.url, 'fail');
+          notes.set(s.url, String(e?.message ?? e).slice(0, 80));
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: 5 }, worker));
+  }
+
+  const sources: Omit<EvSource, 'id'>[] = [];
+  for (const { quotes, claims, ...s } of list) {
+    const page = pageText.get(s.url) ?? '';
+    const cited = quotes.length > 0 || claims.length > 0;
+    diag.urls.push({ url: s.url, title: s.title, cited, fetched: status.get(s.url) ?? 'skip', note: notes.get(s.url) });
+    if (!page && !cited) continue;
+    sources.push({
       ...s,
-      snippet: [quotes.length ? `원문 인용: ${quotes.join(' … ')}` : '', claims.length ? `AI 요약: ${claims.join(' / ')}` : ''].filter(Boolean).join('\n').slice(0, 1500),
-    }));
-  return { sources, searches };
+      snippet: [page ? `원문 발췌: ${page}` : '', quotes.length ? `원문 인용: ${quotes.join(' … ')}` : '', claims.length ? `AI 요약: ${claims.join(' / ')}` : '']
+        .filter(Boolean)
+        .join('\n')
+        .slice(0, 2500),
+    });
+  }
+  diag.kept = sources.length;
+  return { sources, searches, diag };
 }
+
+/** 지자체 수집 진단 한 줄 */
+export const govDiagText = (d: GovDiag) =>
+  `웹 검색 ${d.searches}회 · 검색 결과 페이지 ${d.urls.length}건 · 직접 확인 ${d.urls.filter((u) => u.fetched === 'ok').length}건 · 근거로 채택 ${d.kept}건`;
 
 function pageAgeToYmd(s?: string) {
   if (!s) return '';
@@ -316,19 +541,23 @@ function pageAgeToYmd(s?: string) {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
 }
 
-/** 설정의 "지역:도메인" 줄 → 선택 지역의 도메인 목록 (+ 도청) */
+/**
+ * 설정의 "지역:도메인" 줄 → 선택 지역의 도메인 목록 (+ 경남 공통)
+ * 한 지역에 여러 줄 가능 (예: 진주:jinju.go.kr / 진주:jinjuart.or.kr)
+ */
 export function domainsFor(setting: string, regions: string[]) {
-  const map = new Map<string, string>();
+  const pairs: { key: string; domain: string }[] = [];
   for (const line of setting.split(/\r?\n|,/)) {
-    const [k, v] = line.split(':').map((x) => x?.trim());
-    if (k && v) map.set(k.replace(/(시|군)$/, ''), v.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, ''));
+    const i = line.indexOf(':');
+    if (i < 0) continue;
+    const k = line.slice(0, i).trim();
+    const v = line.slice(i + 1).trim();
+    if (k && v) pairs.push({ key: k.replace(/(시|군)$/, ''), domain: v.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '') });
   }
   const out: { domain: string; region: string }[] = [];
   for (const r of regions) {
-    const d = map.get(r.replace(/(시|군)$/, ''));
-    if (d) out.push({ domain: d, region: r });
+    for (const p of pairs) if (p.key === r.replace(/(시|군)$/, '')) out.push({ domain: p.domain, region: r });
   }
-  const dosi = map.get('경남');
-  if (dosi) out.push({ domain: dosi, region: '경남' });
+  for (const p of pairs) if (p.key === '경남') out.push({ domain: p.domain, region: '경남' });
   return out.filter((x, i) => out.findIndex((y) => y.domain === x.domain) === i);
 }

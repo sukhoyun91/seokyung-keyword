@@ -1,8 +1,9 @@
 /** 수집 출처 종류: 관광공사 공식 / 지자체 웹사이트 / 뉴스 */
-export type SourceKind = 'tour' | 'gov' | 'news';
+export type SourceKind = 'tour' | 'std' | 'gov' | 'news';
 
 export const KIND_LABEL: Record<SourceKind, string> = {
   tour: '관광공사 TourAPI',
+  std: '문화축제 표준데이터',
   gov: '지자체 웹사이트',
   news: '뉴스',
 };
@@ -17,7 +18,10 @@ export interface EvSource {
   snippet: string; // 근거 원문 (요약·인용)
   region?: string;
   query?: string;
-  // TourAPI 공식 정보
+  organizer?: string;
+  homepage?: string;
+  lastYear?: boolean; // 표준데이터에 작년 일정만 있음
+  // TourAPI·표준데이터 공식 정보
   eventStart?: string; // YYYY-MM-DD
   eventEnd?: string;
   addr?: string;
@@ -57,9 +61,10 @@ export interface EvResult {
   generatedAt: string;
 }
 
-export type StepKey = 'tour' | 'news' | 'gov' | 'summarize';
+export type StepKey = 'tour' | 'std' | 'news' | 'gov' | 'summarize';
 export const STEP_LABEL: Record<StepKey, string> = {
   tour: '관광공사 공식 축제 정보',
+  std: '전국문화축제 표준데이터 (지자체 등록)',
   news: '네이버 뉴스 기사',
   gov: '지자체 웹사이트 (AI 웹 검색)',
   summarize: 'AI 정리 및 검증',
@@ -70,6 +75,7 @@ export interface StepState {
   count?: number;
   message?: string;
   at?: string;
+  debug?: any; // 진단 기록 (지자체 검색 과정)
 }
 
 export interface EvReport {
@@ -79,7 +85,7 @@ export interface EvReport {
   period_end: string;
   regions: string[];
   keywords: string[];
-  options: { tour: boolean; news: boolean; gov: boolean; extra: string };
+  options: { tour: boolean; std?: boolean; news: boolean; gov: boolean; extra: string };
   status: 'collecting' | 'done' | 'error';
   steps: Partial<Record<StepKey, StepState>>;
   sources: EvSource[];

@@ -68,11 +68,17 @@ export function validateResult(raw: RawResult, sources: EvSource[], period: { st
     let end = isDate(e.end_date) ? e.end_date! : start;
     if (end && start && end < start) [start, end] = [end, start];
 
-    // 공식(관광공사) 기간과 대조
-    const tour = srcs.find((s) => s.kind === 'tour' && s.eventStart);
+    // 공식(관광공사·표준데이터) 기간과 대조. 둘 다 있고 서로 다르면 메모
+    const offs = srcs.filter((s) => (s.kind === 'tour' || s.kind === 'std') && s.eventStart);
+    const tour = offs.find((s) => s.kind === 'tour') ?? offs[0];
+    const other = offs.find((s) => s !== tour);
+    if (tour && other && (other.eventStart !== tour.eventStart || (other.eventEnd || other.eventStart) !== (tour.eventEnd || tour.eventStart))) {
+      notes.push(`공식 출처끼리 기간이 다름: 관광공사 ${tour.eventStart}~${tour.eventEnd} / 표준데이터 ${other.eventStart}~${other.eventEnd}`);
+    }
+    if (srcs.some((s) => s.kind === 'std' && s.lastYear) && !tour) notes.push('표준데이터에는 작년 일정만 있음 — 올해 일정 확인 필요');
     if (tour) {
       if (start !== tour.eventStart || end !== (tour.eventEnd || tour.eventStart)) {
-        if (start) notes.push(`AI 정리 기간(${start}~${end})이 관광공사 공식 기간과 달라 공식 기간으로 수정`);
+        if (start) notes.push(`AI 정리 기간(${start}~${end})이 ${tour.kind === 'tour' ? '관광공사' : '표준데이터'} 공식 기간과 달라 공식 기간으로 수정`);
         start = tour.eventStart!;
         end = tour.eventEnd || tour.eventStart!;
       }
@@ -107,7 +113,7 @@ export function validateResult(raw: RawResult, sources: EvSource[], period: { st
       dateText: String(e.date_text ?? ''),
       region: String(e.region ?? tour?.region ?? srcs.find((s) => s.region)?.region ?? ''),
       venue: String(e.venue ?? (tour?.addr || '')),
-      organizer: String(e.organizer ?? ''),
+      organizer: String(e.organizer || tour?.organizer || ''),
       category: String(e.category ?? '기타'),
       summary: String(e.summary ?? ''),
       sourceIds: ids,
@@ -134,10 +140,23 @@ export function validateResult(raw: RawResult, sources: EvSource[], period: { st
 
   const events = [...merged.values()].sort((a, b) => (a.start || '9999').localeCompare(b.start || '9999') || a.region.localeCompare(b.region) || a.name.localeCompare(b.name));
 
-  // 관광공사 공식 축제 중 AI가 빠뜨린 항목은 자동으로 추가
+  // 공식 출처(관광공사·표준데이터) 축제 중 AI가 빠뜨린 항목은 자동으로 추가 (이름이 같은 행사가 이미 있으면 출처만 합침)
   const usedTour = new Set(events.flatMap((e) => e.sourceIds));
   for (const s of sources) {
-    if (s.kind !== 'tour' || usedTour.has(s.id) || !s.eventStart) continue;
+    if ((s.kind !== 'tour' && s.kind !== 'std') || usedTour.has(s.id) || !s.eventStart) continue;
+    const same = events.find((e) => normName(e.name) === normName(s.title) && (!e.start || e.start === s.eventStart));
+    if (same) {
+      same.sourceIds.push(s.id);
+      if (!same.start) {
+        same.start = s.eventStart;
+        same.end = s.eventEnd || s.eventStart;
+        same.notes = same.notes.filter((n) => n !== '정확한 날짜 미확인');
+        same.notes.push(`날짜를 ${s.kind === 'tour' ? '관광공사' : '표준데이터'} 공식 정보로 보완`);
+      }
+      same.trust = 'official';
+      same.dateVerified = true;
+      continue;
+    }
     if (!overlaps(s.eventStart, s.eventEnd || s.eventStart, period.start, period.end)) continue;
     events.push({
       name: s.title,
@@ -146,13 +165,13 @@ export function validateResult(raw: RawResult, sources: EvSource[], period: { st
       dateText: '',
       region: s.region ?? '',
       venue: s.addr ?? '',
-      organizer: '',
+      organizer: s.organizer ?? '',
       category: '축제',
       summary: '',
       sourceIds: [s.id],
       trust: 'official',
       dateVerified: true,
-      notes: ['AI 정리에서 빠져 관광공사 공식 목록에서 자동 추가'],
+      notes: [`AI 정리에서 빠져 ${s.kind === 'tour' ? '관광공사' : '문화축제 표준데이터'} 공식 목록에서 자동 추가`],
     });
   }
   events.sort((a, b) => (a.start || '9999').localeCompare(b.start || '9999') || a.region.localeCompare(b.region));

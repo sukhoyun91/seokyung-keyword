@@ -18,7 +18,7 @@ async function api(url: string, method = 'GET', body?: unknown) {
   return j;
 }
 
-const GROUPS: { title: string; desc?: string; keys: string[]; test?: 'claude' | 'naver' | 'hub' | 'tour' }[] = [
+const GROUPS: { title: string; desc?: string; keys: string[]; test?: 'claude' | 'naver' | 'hub' | 'tour' | 'gov' }[] = [
   {
     title: 'Claude API (키워드 생성)',
     desc: 'console.anthropic.com 에서 발급한 API 키. 회사 결제 계정으로 발급하세요.',
@@ -39,7 +39,7 @@ const GROUPS: { title: string; desc?: string; keys: string[]; test?: 'claude' | 
   },
   {
     title: '지역 행사 정보 수집',
-    desc: 'TourAPI: 공공데이터포털(data.go.kr)에서 "한국관광공사_국문 관광정보 서비스_GW" 활용 신청 → 일반 인증키(Decoding). 지자체 웹사이트는 AI 웹 검색이 이 도메인 안에서만 찾습니다.',
+    desc: 'TourAPI: 공공데이터포털(data.go.kr)에서 "한국관광공사_국문 관광정보 서비스_GW" 활용 신청 → 일반 인증키(Decoding). 지자체 웹사이트는 AI 웹 검색이 이 도메인 안에서만 찾습니다. 한 지역에 여러 줄을 쓸 수 있으니 문화재단·문화예술회관 사이트도 "진주:도메인" 형식으로 추가하세요.',
     keys: ['tour_api_key', 'gov_domains', 'event_web_search_max'],
     test: 'tour',
   },
@@ -90,7 +90,7 @@ export default function AdminPanel({ meId }: { meId: number }) {
     setSettings(j.settings);
   }
 
-  async function test(target: 'claude' | 'naver' | 'hub' | 'tour') {
+  async function test(target: 'claude' | 'naver' | 'hub' | 'tour' | 'gov') {
     setTestMsg((t) => ({ ...t, [target]: 'busy' }));
     try {
       const j = await api('/api/admin/test', 'POST', { target });
@@ -245,6 +245,15 @@ export default function AdminPanel({ meId }: { meId: number }) {
               </button>
             )}
           </div>
+          {g.keys.includes('gov_domains') && (
+            <div className="btn-row" style={{ marginTop: 8, alignItems: 'center' }}>
+              <button onClick={() => test('gov')} disabled={testMsg.gov === 'busy'}>{testMsg.gov === 'busy' ? '검색 중… (최대 1분)' : '지자체 검색 테스트'}</button>
+              <span className="hint">지역 목록 첫 번째 지역의 다음 달 행사를 웹 검색 3회로 찾아 과정을 보여 줍니다 (약 50원).</span>
+            </div>
+          )}
+          {g.keys.includes('gov_domains') && testMsg.gov && testMsg.gov !== 'busy' && (
+            <div className={`msg ${(testMsg.gov as any).ok ? 'ok' : 'err'}`}>{(testMsg.gov as any).message}</div>
+          )}
           {g.test && testMsg[g.test] && testMsg[g.test] !== 'busy' && (
             <div className={`msg ${(testMsg[g.test] as any).ok ? 'ok' : 'err'}`}>{(testMsg[g.test] as any).message}</div>
           )}

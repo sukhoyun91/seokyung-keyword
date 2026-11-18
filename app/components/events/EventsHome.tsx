@@ -27,7 +27,7 @@ function monthRange(offset: number) {
   return { start: iso(s), end: iso(e), label: `${s.getUTCMonth() + 1}월` };
 }
 
-export default function EventsHome({ regions, ready, isAdmin, meId }: { regions: string[]; ready: { tour: boolean; news: boolean; gov: boolean; ai: boolean }; isAdmin: boolean; meId: number }) {
+export default function EventsHome({ regions, ready, isAdmin, meId }: { regions: string[]; ready: { tour: boolean; std: boolean; news: boolean; gov: boolean; ai: boolean }; isAdmin: boolean; meId: number }) {
   const next = monthRange(1);
   const [title, setTitle] = useState('');
   const [start, setStart] = useState(next.start);
@@ -36,7 +36,7 @@ export default function EventsHome({ regions, ready, isAdmin, meId }: { regions:
   const [useBase, setUseBase] = useState(true);
   const [kw, setKw] = useState<string[]>([]);
   const [kwInput, setKwInput] = useState('');
-  const [src, setSrc] = useState({ tour: ready.tour, news: ready.news, gov: ready.gov });
+  const [src, setSrc] = useState({ tour: ready.tour, std: ready.std, news: ready.news, gov: ready.gov });
   const [extra, setExtra] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -82,7 +82,7 @@ export default function EventsHome({ regions, ready, isAdmin, meId }: { regions:
 
   const keywordsPreview = [...(useBase ? BASE_KEYWORDS : []), ...kw];
   const queries = sel.length * keywordsPreview.length;
-  const anySource = src.tour || src.news || src.gov;
+  const anySource = src.tour || src.std || src.news || src.gov;
 
   return (
     <div className="container">
@@ -141,6 +141,7 @@ export default function EventsHome({ regions, ready, isAdmin, meId }: { regions:
           <label>수집 출처</label>
           {([
             ['tour', '관광공사 공식 축제 정보 (TourAPI)', ready.tour],
+            ['std', '전국문화축제 표준데이터 (지자체 등록)', ready.std],
             ['gov', '지자체 웹사이트 (AI 웹 검색)', ready.gov],
             ['news', '네이버 뉴스 기사', ready.news],
           ] as const).map(([k, label, ok]) => (
