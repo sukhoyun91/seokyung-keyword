@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { APP_VERSION } from '@/lib/version';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -39,6 +40,7 @@ export default function LoginPage() {
         <button className="primary block" style={{ marginTop: 16 }} disabled={busy || !username || !password}>
           {busy ? '확인 중…' : '로그인'}
         </button>
+        <p className="hint" style={{ textAlign: 'center', margin: '12px 0 0' }}>v{APP_VERSION}</p>
       </form>
     </div>
   );

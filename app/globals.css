@@ -200,3 +200,41 @@ textarea.opinion { min-height: 280px; font-size: .92rem; line-height: 1.65; }
   .pivot-wrap { max-height: none; overflow: visible; }
   .rp-table, .rp-table.compact td { font-size: 8pt; }
 }
+
+.nav .logo small.ver { margin-left: 8px; padding: 1px 6px; border: 1px solid rgba(255,255,255,.45); border-radius: 999px; font-size: .72rem; opacity: .9; }
+
+/* ── 지역 행사 정보 ─────────────────────── */
+.chip-btn { padding: 4px 10px; font-size: .82rem; border-radius: 999px; }
+.chip-check { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-check label { display: inline-flex; align-items: center; gap: 4px; margin: 0; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; font-weight: 400; font-size: .85rem; cursor: pointer; background: #fff; }
+.chip-check label.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.chip-check input { display: none; }
+.chip .x { border: 0; background: none; padding: 0 0 0 4px; color: var(--muted); cursor: pointer; }
+.ev-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .86rem; color: var(--muted); margin-top: 6px; }
+.ev-meta b { color: var(--ink); margin-right: 4px; }
+.steps { display: grid; gap: 8px; }
+.step { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.step-dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #eef1f6; font-weight: 700; }
+.step.s-done .step-dot { background: #e7f6ee; color: var(--ok); }
+.step.s-error { border-color: #f0c6c0; background: #fffafa; }
+.step.s-error .step-dot { background: #fdecea; color: var(--err); }
+.step.s-running { border-color: var(--brand); }
+.step .spinner.dark { margin: 0; }
+.overview { line-height: 1.7; margin: 0; }
+.ev-table td { vertical-align: top; }
+.ev-notes { margin: 6px 0 0; padding-left: 16px; font-size: .78rem; color: var(--warn); }
+.src-refs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.src-ref { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: .74rem; font-weight: 700; text-decoration: none; border: 1px solid; line-height: 1.6; }
+.src-ref.k-tour { color: var(--ok); border-color: #a9dbbf; background: #f1faf5; }
+.src-ref.k-gov { color: #6b3fb5; border-color: #cdb8ee; background: #f6f1fd; }
+.src-ref.k-news { color: var(--brand); border-color: #b7d0ec; background: #f2f7fd; }
+.x-btn { padding: 2px 8px; }
+.ev-list { margin: 0; padding-left: 18px; line-height: 1.7; }
+.src-list { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 8px; }
+.src-list li { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.src-snip { font-size: .8rem; color: var(--muted); white-space: pre-wrap; margin-top: 2px; max-height: 6.5em; overflow: hidden; }
+@media print {
+  .ev-report .src-snip { max-height: none; }
+  .ev-report .src-ref { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+button { white-space: nowrap; }

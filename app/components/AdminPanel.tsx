@@ -18,7 +18,7 @@ async function api(url: string, method = 'GET', body?: unknown) {
   return j;
 }
 
-const GROUPS: { title: string; desc?: string; keys: string[]; test?: 'claude' | 'naver' | 'hub' }[] = [
+const GROUPS: { title: string; desc?: string; keys: string[]; test?: 'claude' | 'naver' | 'hub' | 'tour' }[] = [
   {
     title: 'Claude API (키워드 생성)',
     desc: 'console.anthropic.com 에서 발급한 API 키. 회사 결제 계정으로 발급하세요.',
@@ -32,10 +32,16 @@ const GROUPS: { title: string; desc?: string; keys: string[]; test?: 'claude' | 
     test: 'naver',
   },
   {
-    title: '네이버 검색 API — API HUB (서경방송 노출 순위)',
-    desc: '네이버 클라우드 플랫폼 콘솔 → NAVER API HUB → Application 등록(블로그·웹문서·카페 검색 선택) → 인증 정보. 주소 목록 예: iscs.co.kr, blog.naver.com/블로그아이디',
+    title: '네이버 검색 API — API HUB (노출 순위 · 행사 뉴스 수집)',
+    desc: '키워드 분석의 서경방송 노출 순위와 지역 행사 정보의 뉴스 수집에 함께 씁니다. 네이버 클라우드 플랫폼 콘솔 → NAVER API HUB → Application 등록(블로그·웹문서·카페 검색 선택) → 인증 정보. 주소 목록 예: iscs.co.kr, blog.naver.com/블로그아이디',
     keys: ['naver_hub_client_id', 'naver_hub_client_secret', 'exposure_targets', 'exposure_areas'],
     test: 'hub',
+  },
+  {
+    title: '지역 행사 정보 수집',
+    desc: 'TourAPI: 공공데이터포털(data.go.kr)에서 "한국관광공사_국문 관광정보 서비스_GW" 활용 신청 → 일반 인증키(Decoding). 지자체 웹사이트는 AI 웹 검색이 이 도메인 안에서만 찾습니다.',
+    keys: ['tour_api_key', 'gov_domains', 'event_web_search_max'],
+    test: 'tour',
   },
   { title: 'AI 분석 기준', keys: ['brand_context', 'region_list'] },
   { title: '사용 한도', desc: 'AI 비용 관리용. 관리자 계정은 일일 한도가 적용되지 않습니다.', keys: ['daily_limit', 'max_keywords'] },
@@ -84,7 +90,7 @@ export default function AdminPanel({ meId }: { meId: number }) {
     setSettings(j.settings);
   }
 
-  async function test(target: 'claude' | 'naver' | 'hub') {
+  async function test(target: 'claude' | 'naver' | 'hub' | 'tour') {
     setTestMsg((t) => ({ ...t, [target]: 'busy' }));
     try {
       const j = await api('/api/admin/test', 'POST', { target });
@@ -207,7 +213,7 @@ export default function AdminPanel({ meId }: { meId: number }) {
           {g.keys.map((k) => {
             const s = byKey(k);
             if (!s) return null;
-            const long = k === 'brand_context';
+            const long = k === 'brand_context' || k === 'gov_domains';
             return (
               <div key={k}>
                 <label>

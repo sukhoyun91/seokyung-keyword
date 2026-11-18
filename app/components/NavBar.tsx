@@ -1,8 +1,9 @@
 'use client';
 import { useState } from 'react';
 import type { SessionUser } from '@/lib/auth';
+import { APP_VERSION, BUILD_ID } from '@/lib/version';
 
-export default function NavBar({ user, active }: { user: SessionUser; active: 'home' | 'admin' | 'ads' }) {
+export default function NavBar({ user, active }: { user: SessionUser; active: 'home' | 'admin' | 'ads' | 'events' }) {
   const [pwOpen, setPwOpen] = useState(false);
 
   async function logout() {
@@ -14,9 +15,10 @@ export default function NavBar({ user, active }: { user: SessionUser; active: 'h
     <>
       <nav className="nav no-print">
         <div className="nav-inner">
-          <span className="logo">서경방송<small>마케팅 도구</small></span>
+          <span className="logo">서경방송<small>마케팅 도구</small><small className="ver" title={BUILD_ID ? `배포 ${BUILD_ID}` : ''}>v{APP_VERSION}</small></span>
           <a href="/" className={active === 'home' ? 'active' : ''}>키워드 분석</a>
           <a href="/ads" className={active === 'ads' ? 'active' : ''}>검색광고 보고서</a>
+          <a href="/events" className={active === 'events' ? 'active' : ''}>지역 행사 정보</a>
           {user.role === 'admin' && <a href="/admin" className={active === 'admin' ? 'active' : ''}>관리자</a>}
           <span className="spacer" />
           <span className="who">{user.name}{user.role === 'admin' ? ' (관리자)' : ''}</span>

@@ -20,6 +20,14 @@ export const SETTING_DEFS = {
     default: 'iscs.co.kr',
   },
   exposure_areas: { label: '노출 순위 확인 영역(blog, webkr, cafearticle 중 쉼표 구분)', secret: false, default: 'blog,webkr' },
+  tour_api_key: { label: '공공데이터포털 TourAPI 인증키 (일반 인증키 Decoding)', secret: true, default: '' },
+  gov_domains: {
+    label: '지자체 웹사이트 (지역:도메인, 줄마다 하나)',
+    secret: false,
+    default:
+      '진주:jinju.go.kr\n사천:sacheon.go.kr\n통영:tongyeong.go.kr\n거제:geoje.go.kr\n고성:goseong.go.kr\n남해:namhae.go.kr\n하동:hadong.go.kr\n산청:sancheong.go.kr\n함양:hygn.go.kr\n거창:geochang.go.kr\n합천:hc.go.kr\n의령:uiryeong.go.kr\n경남:gyeongnam.go.kr',
+  },
+  event_web_search_max: { label: '보고서 1건당 AI 웹 검색 최대 횟수 (1회 약 15원)', secret: false, default: '8' },
   region_list: { label: '지역 키워드 목록(쉼표 구분)', secret: false, default: '진주,사천,통영,거제,고성,남해,하동,산청,함양,거창,합천,의령' },
   brand_context: {
     label: 'AI에 전달할 회사·서비스 설명',
