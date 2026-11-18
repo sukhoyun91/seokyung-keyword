@@ -53,6 +53,30 @@ export interface SiteInfo {
   text: string;
 }
 
+/** 접속 실패 원인 코드 (예: ENOTFOUND, ECONNRESET, UND_ERR_CONNECT_TIMEOUT, UNABLE_TO_VERIFY_LEAF_SIGNATURE) */
+export function netErrorCode(e: any): string {
+  if (e?.name === 'AbortError') return '응답 시간 초과(12초)';
+  const c = e?.cause;
+  return String(c?.code || c?.errno || e?.code || c?.message || e?.message || '알 수 없는 오류').slice(0, 80);
+}
+
+// 일부 공공기관 보안 장비가 프로그램 접속을 막기 때문에 일반 브라우저와 같은 이름으로 접속
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.5',
+};
+
+async function getPage(url: URL): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12_000);
+  try {
+    return await fetch(url, { signal: ctrl.signal, redirect: 'follow', headers: BROWSER_HEADERS, cache: 'no-store' });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** 사이트 HTML을 가져와 제목·메타·본문 텍스트를 추출 (최대 약 12,000자) */
 export async function fetchSite(raw: string): Promise<SiteInfo> {
   // 광고 추적 파라미터 제거
@@ -61,21 +85,25 @@ export async function fetchSite(raw: string): Promise<SiteInfo> {
     if (/^(utm_|NaPm|fbclid|gclid|n_)/i.test(k)) url.searchParams.delete(k);
   }
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 12_000);
   let res: Response;
   try {
-    res = await fetch(url, {
-      signal: ctrl.signal,
-      redirect: 'follow',
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SKB-KeywordTool/1.0)', 'Accept-Language': 'ko-KR,ko;q=0.9' },
-    });
-  } catch {
-    throw new Error('사이트에 접속하지 못했습니다. 주소를 확인하거나 화면 캡처 이미지로 분석해 주세요.');
-  } finally {
-    clearTimeout(timer);
+    res = await getPage(url);
+  } catch (e: any) {
+    const code = netErrorCode(e);
+    // 공공기관 사이트 중 인증서 설정이 불완전한 곳이 있어, 보안 연결(https)이 거부되면 일반 연결(http)로 한 번 더 시도
+    if (url.protocol === 'https:' && /CERT|SELF_SIGNED|UNABLE_TO|SSL|TLS|EPROTO/i.test(code)) {
+      const http = new URL(url.toString());
+      http.protocol = 'http:';
+      try {
+        res = await getPage(http);
+      } catch (e2: any) {
+        throw new Error(`사이트에 접속하지 못했습니다 (${code} → http 재시도도 실패: ${netErrorCode(e2)})`);
+      }
+    } else {
+      throw new Error(`사이트에 접속하지 못했습니다 (${code}). 주소를 확인하거나 화면 캡처 이미지로 분석해 주세요.`);
+    }
   }
-  if (!res.ok) throw new Error(`사이트 응답 오류 (${res.status}). 화면 캡처 이미지로 분석해 주세요.`);
+  if (!res.ok) throw new Error(`사이트 응답 오류 (HTTP ${res.status}${res.status === 403 ? ' 접속 차단' : ''}). 화면 캡처 이미지로 분석해 주세요.`);
 
   // 한글 인코딩(EUC-KR) 사이트 대응
   const buf = Buffer.from(await res.arrayBuffer());

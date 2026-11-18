@@ -152,6 +152,9 @@ export const tourDiagText = (d: TourDiag) =>
 // 1-2) 전국문화축제표준데이터 (공공데이터포털, 지자체 등록)
 // ─────────────────────────────────────────────
 export interface StdDiag {
+  resultCode: string;
+  resultMsg: string;
+  raw: string; // 0건일 때 응답 앞부분 (원인 확인용)
   total: number;
   fetched: number;
   gyeongnam: number;
@@ -170,31 +173,46 @@ const shiftYear = (d: string, n: number) => (d ? `${Number(d.slice(0, 4)) + n}${
 
 export async function collectStd(opts: { serviceKey: string; start: string; end: string; regions: string[] }): Promise<{ sources: Omit<EvSource, 'id'>[]; diag: StdDiag }> {
   const key = opts.serviceKey.includes('%') ? opts.serviceKey : encodeURIComponent(opts.serviceKey.trim());
-  const ROWS = 1000;
   const all: Record<string, any>[] = [];
   let total = 0;
-  for (let page = 1; page <= 10; page++) {
-    const url = `https://api.data.go.kr/openapi/tn_pubr_public_cltur_fstvl_api?serviceKey=${key}&pageNo=${page}&numOfRows=${ROWS}&type=json`;
-    const res = await fetch(url, { cache: 'no-store' });
-    const text = await res.text();
-    if (!res.ok || text.trim().startsWith('<')) {
-      if (/SERVICE_KEY|SERVICE KEY|인증|등록되지/.test(text)) throw new Error('문화축제 표준데이터 인증키 오류입니다. 공공데이터포털에서 이 데이터의 활용 신청이 승인됐는지 확인하세요.');
-      if (/NODATA|데이터없음/i.test(text)) break;
-      throw new Error(`문화축제 표준데이터 응답 오류 (${res.status}): ${stripTags(text).slice(0, 150)}`);
+  let resultCode = '';
+  let resultMsg = '';
+  let raw = '';
+  // 한 번에 많이 요청하면 빈 결과를 주는 경우가 있어 1000건 → 0건이면 100건 단위로 다시 시도
+  for (const ROWS of [1000, 100]) {
+    all.length = 0;
+    for (let page = 1; page <= (ROWS === 1000 ? 10 : 40); page++) {
+      const url = `https://api.data.go.kr/openapi/tn_pubr_public_cltur_fstvl_api?serviceKey=${key}&pageNo=${page}&numOfRows=${ROWS}&type=json`;
+      const res = await fetch(url, { cache: 'no-store' });
+      const text = await res.text();
+      if (page === 1) raw = text.replace(/\s+/g, ' ').slice(0, 300);
+      if (!res.ok || text.trim().startsWith('<')) {
+        const code = text.match(/<(?:returnReasonCode|resultCode)>([^<]+)</)?.[1] ?? '';
+        const msg = text.match(/<(?:returnAuthMsg|resultMsg|errMsg)>([^<]+)</)?.[1] ?? '';
+        if (/SERVICE_KEY|SERVICE KEY|인증|등록되지/.test(text)) throw new Error(`문화축제 표준데이터 인증키 오류 (${code} ${msg}). 활용 신청 직후라면 1~2시간 뒤 다시 시도하세요.`);
+        if (/NODATA|데이터없음/i.test(text)) {
+          resultCode = code || '03';
+          resultMsg = msg || 'NODATA';
+          break;
+        }
+        throw new Error(`문화축제 표준데이터 응답 오류 (HTTP ${res.status} ${code} ${msg}): ${stripTags(text).slice(0, 150)}`);
+      }
+      const j = JSON.parse(text);
+      const header = j?.response?.header;
+      resultCode = String(header?.resultCode ?? '00');
+      resultMsg = String(header?.resultMsg ?? '');
+      if (resultCode === '03') break; // 데이터 없음
+      if (!['00', '0', '0000'].includes(resultCode)) throw new Error(`문화축제 표준데이터 오류: ${resultMsg} (${resultCode})`);
+      const body = j?.response?.body;
+      let items = body?.items?.item ?? body?.items ?? [];
+      if (!Array.isArray(items)) items = items && typeof items === 'object' ? [items] : [];
+      total = Number(body?.totalCount ?? 0);
+      all.push(...items.map(lowerKeys));
+      if (page * ROWS >= total || !items.length) break;
     }
-    const j = JSON.parse(text);
-    const header = j?.response?.header;
-    const code = String(header?.resultCode ?? '00');
-    if (code === '03') break; // 데이터 없음
-    if (!['00', '0', '0000'].includes(code)) throw new Error(`문화축제 표준데이터 오류: ${header?.resultMsg} (${code})`);
-    const body = j?.response?.body;
-    let items = body?.items?.item ?? body?.items ?? [];
-    if (!Array.isArray(items)) items = items && typeof items === 'object' ? [items] : [];
-    total = Number(body?.totalCount ?? 0);
-    all.push(...items.map(lowerKeys));
-    if (page * ROWS >= total || !items.length) break;
+    if (all.length) break;
   }
-  const diag: StdDiag = { total, fetched: all.length, gyeongnam: 0, region: 0, inPeriod: 0, lastYear: 0, sample: [] };
+  const diag: StdDiag = { resultCode, resultMsg, raw: all.length ? '' : raw, total, fetched: all.length, gyeongnam: 0, region: 0, inPeriod: 0, lastYear: 0, sample: [] };
   const out: Omit<EvSource, 'id'>[] = [];
   const seen = new Set<string>();
   for (const it of all) {
@@ -249,7 +267,8 @@ export async function collectStd(opts: { serviceKey: string; start: string; end:
 }
 
 export const stdDiagText = (d: StdDiag) =>
-  `받은 자료 ${d.fetched}건(전체 ${d.total}) → 경남 ${d.gyeongnam} → 선택 지역 ${d.region} → 기간 내 ${d.inPeriod}${d.lastYear ? ` (+작년 같은 시기 ${d.lastYear}건, 올해 일정 미확인)` : ''}`;
+  `받은 자료 ${d.fetched}건(전체 ${d.total}) → 경남 ${d.gyeongnam} → 선택 지역 ${d.region} → 기간 내 ${d.inPeriod}${d.lastYear ? ` (+작년 같은 시기 ${d.lastYear}건, 올해 일정 미확인)` : ''}` +
+  (d.fetched ? '' : ` · 결과코드 ${d.resultCode || '-'} ${d.resultMsg} · 응답: ${d.raw || '(빈 응답)'}`);
 
 // ─────────────────────────────────────────────
 // 2) 네이버 뉴스 검색 (NAVER API HUB)
@@ -506,7 +525,7 @@ export async function collectGov(opts: {
           }
         } catch (e: any) {
           status.set(s.url, 'fail');
-          notes.set(s.url, String(e?.message ?? e).slice(0, 80));
+          notes.set(s.url, String(e?.message ?? e).replace(/\. 주소를 확인하거나.*$/, '').replace(/\. 화면 캡처.*$/, '').slice(0, 120));
         }
       }
     };
