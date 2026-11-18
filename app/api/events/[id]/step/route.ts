@@ -1,7 +1,7 @@
 import { requireUser, errorResponse, HttpError } from '@/lib/auth';
 import { getSettings } from '@/lib/settings';
 import { loadReport, saveFields } from '@/lib/events/store';
-import { collectTour, collectNews, collectGov, domainsFor } from '@/lib/events/sources';
+import { collectTour, collectNews, collectGov, domainsFor, tourDiagText } from '@/lib/events/sources';
 import { summarizeEvents } from '@/lib/events/summarize';
 import type { EvSource, StepKey } from '@/lib/events/types';
 
@@ -38,10 +38,11 @@ export async function POST(req: Request, { params }: Ctx) {
 
     if (step === 'tour') {
       if (!s.tour_api_key) throw new HttpError(400, 'TourAPI 인증키가 설정되지 않았습니다. 관리자 설정에서 입력하거나 이 출처를 끄세요.');
-      const found = await collectTour({ serviceKey: s.tour_api_key, start: r.period_start, end: r.period_end, regions: r.regions });
+      const { sources: found, diag } = await collectTour({ serviceKey: s.tour_api_key, start: r.period_start, end: r.period_end, regions: r.regions });
       const sources = renumber([...keep('tour'), ...found]);
       count = found.length;
-      await saveFields(id, { sources, steps: { ...steps, tour: { status: 'done', count, at: new Date().toISOString() } } });
+      message = tourDiagText(diag);
+      await saveFields(id, { sources, steps: { ...steps, tour: { status: 'done', count, message, at: new Date().toISOString() } } });
     } else if (step === 'news') {
       if (!s.naver_hub_client_id || !s.naver_hub_client_secret) throw new HttpError(400, '네이버 검색 API(API HUB) 키가 설정되지 않았습니다. 관리자 설정에서 입력하거나 이 출처를 끄세요.');
       const { sources: found, failed } = await collectNews({

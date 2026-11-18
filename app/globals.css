@@ -238,3 +238,7 @@ textarea.opinion { min-height: 280px; font-size: .92rem; line-height: 1.65; }
   .ev-report .src-ref { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 button { white-space: nowrap; }
+.msg { white-space: pre-line; }
+.collect-log { margin-top: 8px; font-size: .82rem; color: var(--muted); }
+.collect-log summary { cursor: pointer; }
+.collect-log li { margin: 2px 0; }

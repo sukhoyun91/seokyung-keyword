@@ -3,7 +3,7 @@ import { getSettings } from '@/lib/settings';
 import { pingClaude } from '@/lib/claude';
 import { fetchKeywordStats } from '@/lib/naver';
 import { findRank, parseAreas, EXPOSURE_AREAS, normalizeTarget } from '@/lib/exposure';
-import { collectTour } from '@/lib/events/sources';
+import { collectTour, tourDiagText } from '@/lib/events/sources';
 
 export const runtime = 'nodejs';
 
@@ -62,8 +62,13 @@ export async function POST(req: Request) {
         const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
         const end = new Date(Date.now() + (9 * 3600 + 60 * 86400) * 1000).toISOString().slice(0, 10);
         const regions = s.region_list.split(',').map((x) => x.trim()).filter(Boolean);
-        const found = await collectTour({ serviceKey: s.tour_api_key, start: today, end, regions });
-        return Response.json({ ok: true, message: `연결 성공 — 앞으로 60일간 설정 지역 축제 ${found.length}건${found[0] ? ` (예: ${found[0].title})` : ''}` });
+        const { sources: found, diag } = await collectTour({ serviceKey: s.tour_api_key, start: today, end, regions });
+        const lines = [
+          `연결 성공 — 앞으로 60일간 설정 지역 축제 ${found.length}건${found[0] ? ` (예: ${found[0].title})` : ''}`,
+          tourDiagText(diag),
+          diag.gyeongnam ? `경남 자료 주소 예시: ${diag.sampleAddrs.slice(0, 5).join(' / ')}` : `받은 자료 예시: ${diag.sampleOther.join(' / ') || '없음'}`,
+        ];
+        return Response.json({ ok: true, message: lines.join('\n') });
       } catch (e: any) {
         return Response.json({ ok: false, message: `연결 실패: ${e?.message ?? e}` });
       }

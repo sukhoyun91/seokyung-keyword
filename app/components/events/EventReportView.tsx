@@ -155,6 +155,21 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
           <span><b>검색어</b> {r.keywords.join(', ')}</span>
           <span><b>수집 자료</b> 관광공사 {byKind('tour')} · 지자체 {byKind('gov')} · 뉴스 {byKind('news')}</span>
         </div>
+        <details className="collect-log no-print">
+          <summary>수집 내역 보기</summary>
+          <ul>
+            {STEPS.map((k) => {
+              const st = r.steps[k];
+              if (!st) return null;
+              return (
+                <li key={k}>
+                  <b>{STEP_LABEL[k]}</b>: {st.status === 'done' ? `${st.count ?? 0}건` : st.status === 'skipped' ? '사용 안 함' : st.status === 'error' ? '오류' : '대기'}
+                  {st.message ? ` — ${st.message}` : ''}
+                </li>
+              );
+            })}
+          </ul>
+        </details>
       </header>
 
       {/* ── 수집 진행 */}

@@ -28,59 +28,125 @@ export function regionNames(region: string) {
 // ─────────────────────────────────────────────
 // 1) 한국관광공사 TourAPI (KorService2 / searchFestival2)
 // ─────────────────────────────────────────────
-export async function collectTour(opts: { serviceKey: string; start: string; end: string; regions: string[] }): Promise<Omit<EvSource, 'id'>[]> {
-  const key = opts.serviceKey.includes('%') ? opts.serviceKey : encodeURIComponent(opts.serviceKey);
+export interface TourDiag {
+  strategy: string; // 사용한 조회 방식
+  total: number; // API가 알려 준 전체 건수
+  fetched: number; // 실제로 받은 건수
+  gyeongnam: number; // 경남
+  region: number; // 선택 지역
+  inPeriod: number; // 검색 기간과 겹침
+  sampleAddrs: string[]; // 경남 자료 주소 예시 (지역 판별 확인용)
+  sampleOther: string[]; // 받은 자료 예시 (경남이 0건일 때 확인용)
+}
+
+/** 항목의 필드 이름을 소문자로 통일 (버전마다 eventstartdate / eventStartDate 등 표기가 다름) */
+function lowerKeys(o: any): Record<string, any> {
+  const r: Record<string, any> = {};
+  for (const [k, v] of Object.entries(o ?? {})) r[k.toLowerCase()] = v;
+  return r;
+}
+
+function addDaysYmd(d: string, n: number) {
+  const t = new Date(`${d}T00:00:00Z`);
+  t.setUTCDate(t.getUTCDate() + n);
+  return t.toISOString().slice(0, 10);
+}
+
+async function tourPage(key: string, params: string, page: number, rows: number) {
+  const url =
+    `https://apis.data.go.kr/B551011/KorService2/searchFestival2?serviceKey=${key}` +
+    `&MobileOS=WEB&MobileApp=SKBMarketing&_type=json&arrange=A&numOfRows=${rows}&pageNo=${page}${params}`;
+  const res = await fetch(url, { cache: 'no-store' });
+  const text = await res.text();
+  if (!res.ok || text.trim().startsWith('<')) {
+    if (/SERVICE_KEY|SERVICE KEY|인증|등록되지/.test(text)) throw new Error('TourAPI 인증키 오류입니다. 공공데이터포털의 일반 인증키(Decoding)를 넣었는지, 활용 신청이 승인됐는지 확인하세요.');
+    throw new Error(`TourAPI 응답 오류 (${res.status}): ${stripTags(text).slice(0, 150)}`);
+  }
+  const j = JSON.parse(text);
+  const header = j?.response?.header;
+  if (header?.resultCode && header.resultCode !== '0000') throw new Error(`TourAPI 오류: ${header.resultMsg} (${header.resultCode})`);
+  const body = j?.response?.body;
+  let items = body?.items?.item ?? body?.items ?? [];
+  if (!Array.isArray(items)) items = items && typeof items === 'object' ? [items] : [];
+  return { items: items.map(lowerKeys), total: Number(body?.totalCount ?? 0) };
+}
+
+const isGyeongnam = (it: Record<string, any>, addr: string) =>
+  String(it.ldongregncd ?? '').startsWith('48') || String(it.areacode ?? '') === '36' || /경상남도|경남/.test(addr);
+
+export async function collectTour(opts: { serviceKey: string; start: string; end: string; regions: string[] }): Promise<{ sources: Omit<EvSource, 'id'>[]; diag: TourDiag }> {
+  const key = opts.serviceKey.includes('%') ? opts.serviceKey : encodeURIComponent(opts.serviceKey.trim());
+  // 이미 시작해 진행 중인 축제도 잡기 위해 시작일을 넉넉히 앞당기고, 기간 판단은 아래에서 직접 함
+  const from = compact(addDaysYmd(opts.start, -120));
+  const ROWS = 100;
+  const diag: TourDiag = { strategy: '', total: 0, fetched: 0, gyeongnam: 0, region: 0, inPeriod: 0, sampleAddrs: [], sampleOther: [] };
+
+  // 1차: 경남(법정동 시도코드 48)만 조회 → 0건이면 2차: 전국 조회 후 주소로 거름
+  const strategies = [
+    { name: '경남 지역코드 조회', params: `&eventStartDate=${from}&lDongRegnCd=48`, maxPages: 10 },
+    { name: '전국 조회 후 주소로 거름', params: `&eventStartDate=${from}`, maxPages: 25 },
+  ];
+  let all: Record<string, any>[] = [];
+  for (const st of strategies) {
+    all = [];
+    let total = 0;
+    try {
+      for (let page = 1; page <= st.maxPages; page++) {
+        const r = await tourPage(key, st.params, page, ROWS);
+        total = r.total;
+        all.push(...r.items);
+        if (page * ROWS >= total || !r.items.length) break;
+      }
+    } catch (e: any) {
+      if (/인증키/.test(e?.message ?? '')) throw e;
+      if (st === strategies[strategies.length - 1]) throw e;
+      continue; // 1차 방식이 지원되지 않으면 2차로
+    }
+    diag.strategy = st.name;
+    diag.total = total;
+    if (all.some((it) => isGyeongnam(it, `${it.addr1 ?? ''} ${it.addr2 ?? ''}`))) break;
+  }
+  diag.fetched = all.length;
+
   const out: Omit<EvSource, 'id'>[] = [];
   const seen = new Set<string>();
-  // 지역 코드 체계 변경으로 지역 필터가 0건을 주는 사례가 있어, 전국을 기간으로 조회한 뒤 주소로 거름
-  for (let page = 1; page <= 8; page++) {
-    const url =
-      `https://apis.data.go.kr/B551011/KorService2/searchFestival2?serviceKey=${key}` +
-      `&MobileOS=WEB&MobileApp=SKBMarketing&_type=json&arrange=A&numOfRows=200&pageNo=${page}` +
-      `&eventStartDate=${compact(opts.start)}&eventEndDate=${compact(opts.end)}`;
-    const res = await fetch(url, { cache: 'no-store' });
-    const text = await res.text();
-    if (!res.ok || text.trim().startsWith('<')) {
-      if (/SERVICE_KEY|SERVICE KEY|인증/.test(text)) throw new Error('TourAPI 인증키 오류입니다. 공공데이터포털의 일반 인증키(Decoding)를 넣었는지, 활용 신청이 승인됐는지 확인하세요.');
-      throw new Error(`TourAPI 응답 오류 (${res.status}): ${stripTags(text).slice(0, 150)}`);
-    }
-    const j = JSON.parse(text);
-    const header = j?.response?.header;
-    if (header?.resultCode && header.resultCode !== '0000') throw new Error(`TourAPI 오류: ${header.resultMsg}`);
-    const body = j?.response?.body;
-    let items = body?.items?.item ?? [];
-    if (!Array.isArray(items)) items = [items];
-    for (const it of items) {
-      const addr = `${it.addr1 ?? ''} ${it.addr2 ?? ''}`.trim();
-      if (!/경상남도|경남/.test(addr)) continue;
-      const region = opts.regions.find((r) => regionNames(r).some((n) => addr.includes(n)));
-      if (!region) continue;
-      const s = ymd(String(it.eventstartdate ?? ''));
-      const e = ymd(String(it.eventenddate ?? '')) || s;
-      if (!overlaps(s, e, opts.start, opts.end)) continue;
-      const id = String(it.contentid);
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const title = stripTags(it.title);
-      out.push({
-        kind: 'tour',
-        title,
-        url: `https://korean.visitkorea.or.kr/search/search_list.do?keyword=${encodeURIComponent(title)}`,
-        publisher: '한국관광공사',
-        date: ymd(String(it.modifiedtime ?? '').slice(0, 8)),
-        snippet: `${title} / 기간 ${s} ~ ${e} / 장소 ${addr}${it.tel ? ` / 문의 ${stripTags(it.tel)}` : ''}`,
-        region,
-        eventStart: s,
-        eventEnd: e,
-        addr,
-        tel: stripTags(it.tel ?? ''),
-      });
-    }
-    const total = Number(body?.totalCount ?? 0);
-    if (page * 200 >= total) break;
+  for (const it of all) {
+    const addr = `${it.addr1 ?? ''} ${it.addr2 ?? ''}`.trim();
+    if (diag.sampleOther.length < 5) diag.sampleOther.push(`${stripTags(it.title)} | ${addr || '(주소 없음)'} | 지역코드 ${it.ldongregncd ?? it.areacode ?? '-'}`);
+    if (!isGyeongnam(it, addr)) continue;
+    diag.gyeongnam++;
+    if (diag.sampleAddrs.length < 8) diag.sampleAddrs.push(addr || stripTags(it.title));
+    const title = stripTags(it.title);
+    const region = opts.regions.find((r) => regionNames(r).some((n) => addr.includes(n) || title.includes(n)));
+    if (!region) continue;
+    diag.region++;
+    const s = ymd(String(it.eventstartdate ?? ''));
+    const e = ymd(String(it.eventenddate ?? '')) || s;
+    if (!overlaps(s, e, opts.start, opts.end)) continue;
+    diag.inPeriod++;
+    const id = String(it.contentid ?? title);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      kind: 'tour',
+      title,
+      url: `https://korean.visitkorea.or.kr/search/search_list.do?keyword=${encodeURIComponent(title)}`,
+      publisher: '한국관광공사',
+      date: ymd(String(it.modifiedtime ?? '').slice(0, 8)),
+      snippet: `${title} / 기간 ${s} ~ ${e} / 장소 ${addr}${it.tel ? ` / 문의 ${stripTags(it.tel)}` : ''}`,
+      region,
+      eventStart: s,
+      eventEnd: e,
+      addr,
+      tel: stripTags(it.tel ?? ''),
+    });
   }
-  return out;
+  return { sources: out, diag };
 }
+
+/** 진단 정보를 한 줄로 */
+export const tourDiagText = (d: TourDiag) =>
+  `${d.strategy}: 받은 자료 ${d.fetched}건(전체 ${d.total}) → 경남 ${d.gyeongnam} → 선택 지역 ${d.region} → 기간 내 ${d.inPeriod}`;
 
 // ─────────────────────────────────────────────
 // 2) 네이버 뉴스 검색 (NAVER API HUB)
