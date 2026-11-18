@@ -39,8 +39,8 @@ const GROUPS: { title: string; desc?: string; keys: string[]; test?: 'claude' | 
   },
   {
     title: '지역 행사 정보 수집',
-    desc: 'TourAPI: 공공데이터포털(data.go.kr)에서 "한국관광공사_국문 관광정보 서비스_GW" 활용 신청 → 일반 인증키(Decoding). 지자체 웹사이트는 AI 웹 검색이 이 도메인 안에서만 찾습니다. 한 지역에 여러 줄을 쓸 수 있으니 문화재단·문화예술회관 사이트도 "진주:도메인" 형식으로 추가하세요.',
-    keys: ['tour_api_key', 'gov_domains', 'event_web_search_max'],
+    desc: 'TourAPI: 공공데이터포털(data.go.kr)에서 "한국관광공사_국문 관광정보 서비스_GW" 활용 신청 → 일반 인증키(Decoding). 지자체 웹사이트는 AI 웹 검색이 전국 정부·지자체 사이트(go.kr) 안에서 찾습니다. 문화재단·문화예술회관처럼 go.kr이 아닌 사이트는 "진주시:도메인" 형식으로 추가하세요 (한 지역 여러 줄 가능, 시·도 이름이나 "공통"도 가능).',
+    keys: ['tour_api_key', 'event_default_sido', 'event_default_regions', 'gov_domains', 'event_web_search_max'],
     test: 'tour',
   },
   { title: 'AI 분석 기준', keys: ['brand_context', 'region_list'] },

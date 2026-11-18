@@ -58,15 +58,16 @@ export async function summarizeEvents(opts: {
   regions: string[];
   keywords: string[];
   extra: string;
+  sido?: string;
 }): Promise<EvResult> {
   if (!opts.sources.length) {
     return { overview: '수집된 자료가 없습니다. 검색 기간·지역·검색어를 바꾸거나 출처 설정을 확인하세요.', events: [], excluded: [], conflicts: [], related: [], model: opts.model, generatedAt: new Date().toISOString() };
   }
-  const prompt = `당신은 경남 서부권 지역 방송사 마케팅팀의 자료 조사 담당입니다. 아래 [수집 자료]만 사용해 지역 축제·행사 정보 보고서를 만드세요.
+  const prompt = `당신은 지역 방송사 마케팅팀의 자료 조사 담당입니다. 아래 [수집 자료]만 사용해 지역 축제·행사 정보 보고서를 만드세요.
 
 [조건]
 - 검색 기간: ${opts.start} ~ ${opts.end} (이 기간에 열리거나 진행 중인 것만)
-- 지역: ${opts.regions.join(', ')}
+- 지역: ${opts.sido ? `${opts.sido} ` : ''}${opts.regions.join(', ')} (다른 시·도의 같은 이름 지역 행사는 넣지 않습니다)
 - 주제: ${opts.keywords.join(', ')}
 ${opts.extra ? `- 담당자 요청: ${opts.extra}` : ''}
 

@@ -114,7 +114,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
   function copyText() {
     const lines = [
       `■ ${r!.title}`,
-      `검색 기간 ${r!.period_start} ~ ${r!.period_end} / 지역 ${r!.regions.join(', ')}`,
+      `검색 기간 ${r!.period_start} ~ ${r!.period_end} / 지역 ${r!.options?.sido ?? ''} ${r!.regions.join(', ')}`,
       '',
       res?.overview ?? '',
       '',
@@ -151,7 +151,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
         <div className="ev-meta">
           <span><b>검색 기간</b> {r.period_start} ~ {r.period_end}</span>
           <span><b>작성일</b> {new Date(r.created_at).toLocaleDateString('ko-KR')} ({r.created_by_name})</span>
-          <span><b>지역</b> {r.regions.join(', ')}</span>
+          <span><b>지역</b> {r.options?.sido ? `${r.options.sido} · ` : ''}{r.regions.length > 10 ? `${r.regions.slice(0, 10).join(', ')} 외 ${r.regions.length - 10}곳` : r.regions.join(', ')}</span>
           <span><b>검색어</b> {r.keywords.join(', ')}</span>
           <span><b>수집 자료</b> 관광공사 {byKind('tour')} · 표준데이터 {byKind('std')} · 지자체 {byKind('gov')} · 뉴스 {byKind('news')}</span>
         </div>

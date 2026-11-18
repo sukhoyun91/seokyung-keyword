@@ -21,8 +21,14 @@ export const SETTING_DEFS = {
   },
   exposure_areas: { label: '노출 순위 확인 영역(blog, webkr, cafearticle 중 쉼표 구분)', secret: false, default: 'blog,webkr' },
   tour_api_key: { label: '공공데이터포털 일반 인증키 (TourAPI·문화축제 표준데이터 공용)', secret: true, default: '' },
+  event_default_sido: { label: '지역 행사 정보 기본 시·도', secret: false, default: '경상남도' },
+  event_default_regions: {
+    label: '기본 선택 지역 (쉼표 구분, 화면의 "기본 지역" 버튼)',
+    secret: false,
+    default: '진주시,사천시,통영시,거제시,고성군,남해군,하동군,산청군,함양군,거창군,합천군,의령군',
+  },
   gov_domains: {
-    label: '지자체 웹사이트 (지역:도메인, 줄마다 하나)',
+    label: '추가 검색 사이트 (지역:도메인, 줄마다 하나 · 기본으로 전국 go.kr 전체를 검색)',
     secret: false,
     default:
       '진주:jinju.go.kr\n사천:sacheon.go.kr\n통영:tongyeong.go.kr\n거제:geoje.go.kr\n고성:goseong.go.kr\n남해:namhae.go.kr\n하동:hadong.go.kr\n산청:sancheong.go.kr\n함양:hygn.go.kr\n거창:geochang.go.kr\n합천:hc.go.kr\n의령:uiryeong.go.kr\n경남:gyeongnam.go.kr',

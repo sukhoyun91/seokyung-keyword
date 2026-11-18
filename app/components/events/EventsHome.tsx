@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../ads/fmt';
 import { BASE_KEYWORDS } from '@/lib/events/types';
+import { SIDO, findSido } from '@/lib/events/regions';
 
 interface Row {
   id: number;
@@ -27,12 +28,26 @@ function monthRange(offset: number) {
   return { start: iso(s), end: iso(e), label: `${s.getUTCMonth() + 1}월` };
 }
 
-export default function EventsHome({ regions, ready, isAdmin, meId }: { regions: string[]; ready: { tour: boolean; std: boolean; news: boolean; gov: boolean; ai: boolean }; isAdmin: boolean; meId: number }) {
+export default function EventsHome({ defaultSido, defaultRegions, ready, isAdmin, meId }: { defaultSido: string; defaultRegions: string[]; ready: { tour: boolean; std: boolean; news: boolean; gov: boolean; ai: boolean }; isAdmin: boolean; meId: number }) {
   const next = monthRange(1);
   const [title, setTitle] = useState('');
   const [start, setStart] = useState(next.start);
   const [end, setEnd] = useState(next.end);
-  const [sel, setSel] = useState<string[]>(regions);
+  const initSido = findSido(defaultSido) ?? SIDO.find((x) => x.short === '경남')!;
+  const [sidoName, setSidoName] = useState(initSido.name);
+  const sido = findSido(sidoName)!;
+  const regions = sido.regions;
+  const presetFor = (name: string) => (name === initSido.name ? defaultRegions.filter((r) => initSido.regions.includes(r)) : []);
+  const [sel, setSel] = useState<string[]>(() => {
+    const p = presetFor(initSido.name);
+    return p.length ? p : initSido.regions;
+  });
+  function changeSido(name: string) {
+    setSidoName(name);
+    const next = findSido(name)!;
+    const p = presetFor(name);
+    setSel(p.length ? p : next.regions.length <= 12 ? next.regions : []);
+  }
   const [useBase, setUseBase] = useState(true);
   const [kw, setKw] = useState<string[]>([]);
   const [kwInput, setKwInput] = useState('');
@@ -62,7 +77,7 @@ export default function EventsHome({ regions, ready, isAdmin, meId }: { regions:
     setMsg(null);
     try {
       const pending = kwInput.trim() ? [...kw, ...kwInput.split(',').map((x) => x.trim()).filter(Boolean)] : kw;
-      const j = await api<{ id: number }>('/api/events', 'POST', { title, start, end, regions: sel, useBase, keywords: pending, ...src, extra });
+      const j = await api<{ id: number }>('/api/events', 'POST', { title, start, end, sido: sidoName, regions: sel, useBase, keywords: pending, ...src, extra });
       window.location.href = `/events/report?id=${j.id}&run=1`;
     } catch (e: any) {
       setMsg({ ok: false, text: e.message });
@@ -111,7 +126,12 @@ export default function EventsHome({ regions, ready, isAdmin, meId }: { regions:
             })}
           </div>
 
-          <label>지역</label>
+          <label>시·도</label>
+          <select value={sidoName} onChange={(e) => changeSido(e.target.value)}>
+            {SIDO.map((x) => <option key={x.name} value={x.name}>{x.name}</option>)}
+          </select>
+
+          <label>시·군·구 <span className="hint">{sel.length}/{regions.length}곳 선택</span></label>
           <div className="chip-check">
             {regions.map((r) => (
               <label key={r} className={sel.includes(r) ? 'on' : ''}>
@@ -121,8 +141,10 @@ export default function EventsHome({ regions, ready, isAdmin, meId }: { regions:
             ))}
           </div>
           <div className="btn-row" style={{ marginTop: 6 }}>
-            <button className="chip-btn" onClick={() => setSel(regions)}>전체</button>
-            <button className="chip-btn" onClick={() => setSel(regions.filter((r) => ['진주', '사천'].includes(r)))}>진주·사천</button>
+            <button className="chip-btn" onClick={() => setSel(regions)}>{sido.short} 전체</button>
+            {presetFor(sidoName).length > 0 && presetFor(sidoName).length < regions.length && (
+              <button className="chip-btn" onClick={() => setSel(presetFor(sidoName))}>기본 지역 ({presetFor(sidoName).length}곳)</button>
+            )}
             <button className="chip-btn" onClick={() => setSel([])}>모두 해제</button>
           </div>
 
@@ -155,7 +177,8 @@ export default function EventsHome({ regions, ready, isAdmin, meId }: { regions:
           <input type="text" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="예: 가족 단위 행사 위주로, 무료 행사 표시" />
 
           <p className="hint" style={{ marginTop: 10 }}>
-            검색 조합 {queries}개 (지역 {sel.length} × 검색어 {keywordsPreview.length}) · 수집과 정리에 1~2분 걸립니다.
+            뉴스 검색 조합 {queries}개 (지역 {sel.length} × 검색어 {keywordsPreview.length}){queries > 160 ? ' — 160개를 넘으면 뉴스를 끄거나 지역·검색어를 줄이세요' : ''} · 수집과 정리에 1~2분 걸립니다.
+            {sel.length > 12 && ' 지역이 많으면 지자체 웹 검색은 지역마다 고르게 찾지 못할 수 있습니다.'}
           </p>
           <button className="primary block" onClick={create} disabled={busy || !sel.length || !keywordsPreview.length || !anySource || !ready.ai || !start || !end}>
             {busy ? '준비 중…' : '수집 시작'}
@@ -178,7 +201,7 @@ export default function EventsHome({ regions, ready, isAdmin, meId }: { regions:
                     <tr key={r.id}>
                       <td>
                         <a href={`/events/report?id=${r.id}`}><b>{r.title}</b></a>
-                        <div className="hint">{r.regions.split(',').join(' · ')} | {r.keywords.split(',').join(', ')}</div>
+                        <div className="hint">{r.regions.split(',').length > 6 ? `${r.regions.split(',').slice(0, 6).join(' · ')} 외 ${r.regions.split(',').length - 6}곳` : r.regions.split(',').join(' · ')} | {r.keywords.split(',').join(', ')}</div>
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>{r.period_start.slice(2).replace(/-/g, '.')} ~ {r.period_end.slice(2).replace(/-/g, '.')}</td>
                       <td className="num">{r.status === 'done' ? r.event_count : <span className={`badge ${r.status === 'error' ? 'high' : 'mid'}`}>{r.status === 'error' ? '오류' : '수집 중'}</span>}</td>

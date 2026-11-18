@@ -14,7 +14,8 @@ export default async function EventsPage() {
     <>
       <NavBar user={user} active="events" />
       <EventsHome
-        regions={s.region_list.split(',').map((x) => x.trim()).filter(Boolean)}
+        defaultSido={s.event_default_sido || '경상남도'}
+        defaultRegions={s.event_default_regions.split(',').map((x) => x.trim()).filter(Boolean)}
         ready={{
           tour: Boolean(s.tour_api_key),
           std: Boolean(s.tour_api_key),

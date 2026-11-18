@@ -10,6 +10,24 @@ GitHub 웹 업로드 시에는 각 버전의 **변경 파일**만 올리면 됩�
 
 ---
 
+## v1.5.0 — 2026-11-18
+**지역 행사 정보: 전국으로 확대 (시·도 → 시·군·구 선택)**
+- 수집 조건에서 시·도(17곳)를 먼저 고르고, 그 안의 시·군·구를 선택 (2026년 행정구역 기준, 인천 제물포구·영종구·검단구 반영)
+- 관리자 설정: 기본 시·도, 기본 선택 지역 (화면의 '기본 지역' 버튼)
+- TourAPI: 선택 시·도의 법정동 코드로 조회 (강원·전북은 특별자치도 새 코드·옛 코드 모두), 없으면 전국 조회 후 주소로 거름
+- 지역 판별 정확도: 주소를 띄어쓰기 단위로 비교 (달서구↔서구, 강동구↔동구 혼동 방지), 경기 광주시↔광주광역시, 경남 고성↔강원 고성 구분, 옛 주소 표기(전라북도, 인천 중구 등) 인식
+- 뉴스: 자치구는 "부산 중구 축제"처럼 시·도 이름을 붙여 검색하고, 기사에 시·도와 구 이름이 함께 있어야 채택
+- 지자체 웹 검색: 기본으로 전국 정부·지자체 사이트(go.kr) 전체를 검색. 문화재단 등은 '추가 검색 사이트'에 "지역:도메인"으로 추가
+- 뉴스 검색 조합(지역×검색어) 160개 제한 안내
+- 기존 보고서(서부경남)는 그대로 열림
+
+변경 파일: `lib/events/regions.ts`(새 파일), `lib/events/sources.ts`, `lib/events/types.ts`, `lib/events/summarize.ts`, `lib/settings.ts`, `app/api/events/route.ts`, `app/api/events/[id]/step/route.ts`, `app/api/admin/test/route.ts`, `app/events/page.tsx`, `app/components/events/EventsHome.tsx`, `app/components/events/EventReportView.tsx`, `app/components/AdminPanel.tsx`, `package.json`, `README.md`, `CHANGELOG.md`
+
+## v1.4.2 — 2026-11-18
+- 문화축제 표준데이터 0건 문제 수정: 이 API는 응답을 `response`로 감싸지 않고 `header`/`body`를 바로 보내는데, `response` 안에서만 찾아 빈 결과로 판단하던 문제. 두 형식 모두 읽도록 변경 (TourAPI도 동일하게 보강)
+
+변경 파일: `lib/events/sources.ts`, `package.json`, `CHANGELOG.md`
+
 ## v1.4.1 — 2026-11-18
 **지자체 페이지 '접속하지 못했습니다' · 표준데이터 0건 대응**
 - 서버 실행 지역을 서울(icn1)로 지정 (`vercel.json`) — 국내 공공기관 사이트의 해외 접속 차단 대응

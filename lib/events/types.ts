@@ -85,7 +85,7 @@ export interface EvReport {
   period_end: string;
   regions: string[];
   keywords: string[];
-  options: { tour: boolean; std?: boolean; news: boolean; gov: boolean; extra: string };
+  options: { tour: boolean; std?: boolean; news: boolean; gov: boolean; extra: string; sido?: string };
   status: 'collecting' | 'done' | 'error';
   steps: Partial<Record<StepKey, StepState>>;
   sources: EvSource[];

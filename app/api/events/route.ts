@@ -2,10 +2,11 @@ import { query } from '@/lib/db';
 import { requireUser, errorResponse, HttpError } from '@/lib/auth';
 import { ensureEventsSchema } from '@/lib/events/schema';
 import { BASE_KEYWORDS } from '@/lib/events/types';
+import { findSido } from '@/lib/events/regions';
 
 const isDate = (s: unknown) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
-const clean = (a: unknown) =>
-  [...new Set((Array.isArray(a) ? a : []).map((x) => String(x).replace(/,/g, ' ').trim()).filter(Boolean))].slice(0, 20);
+const clean = (a: unknown, max = 20) =>
+  [...new Set((Array.isArray(a) ? a : []).map((x) => String(x).replace(/,/g, ' ').trim()).filter(Boolean))].slice(0, max);
 
 /** 보고서 목록 */
 export async function GET() {
@@ -35,13 +36,18 @@ export async function POST(req: Request) {
     if (b.start > b.end) throw new HttpError(400, '검색 시작일이 종료일보다 늦습니다.');
     const days = (new Date(b.end).getTime() - new Date(b.start).getTime()) / 86400000;
     if (days > 92) throw new HttpError(400, '검색 기간은 최대 3개월까지 가능합니다.');
-    const regions = clean(b.regions);
-    if (!regions.length) throw new HttpError(400, '지역을 하나 이상 선택하세요.');
+    const sido = findSido(String(b.sido ?? ''));
+    if (!sido) throw new HttpError(400, '시·도를 선택하세요.');
+    const regions = clean(b.regions, 40).filter((r) => sido.regions.includes(r)); // 경기도 31곳까지 모두 허용
+    if (!regions.length) throw new HttpError(400, '시·군·구를 하나 이상 선택하세요.');
     const keywords = clean([...(b.useBase === false ? [] : BASE_KEYWORDS), ...clean(b.keywords)]);
     if (!keywords.length) throw new HttpError(400, '검색어를 하나 이상 입력하세요.');
-    const options = { tour: b.tour !== false, std: b.std !== false, news: b.news !== false, gov: b.gov !== false, extra: String(b.extra ?? '').slice(0, 500) };
+    if (b.news !== false && regions.length * keywords.length > 160) {
+      throw new HttpError(400, `뉴스 검색 조합이 너무 많습니다 (지역 ${regions.length} × 검색어 ${keywords.length}). 지역이나 검색어를 줄이세요 (160개 이하).`);
+    }
+    const options = { tour: b.tour !== false, std: b.std !== false, news: b.news !== false, gov: b.gov !== false, extra: String(b.extra ?? '').slice(0, 500), sido: sido.name };
     if (!options.tour && !options.std && !options.news && !options.gov) throw new HttpError(400, '수집 출처를 하나 이상 선택하세요.');
-    const title = String(b.title ?? '').trim().slice(0, 200) || `${b.start} ~ ${b.end} ${regions.length > 3 ? '서부경남' : regions.join('·')} 축제·행사 정보`;
+    const title = String(b.title ?? '').trim().slice(0, 200) || `${b.start} ~ ${b.end} ${sido.short} ${regions.length === sido.regions.length ? '전체' : regions.length > 3 ? `${regions.slice(0, 3).join('·')} 외 ${regions.length - 3}곳` : regions.join('·')} 축제·행사 정보`;
     const steps: Record<string, unknown> = {
       tour: { status: options.tour ? 'pending' : 'skipped' },
       std: { status: options.std ? 'pending' : 'skipped' },

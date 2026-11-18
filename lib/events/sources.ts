@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { EvSource } from './types';
+import { findSido, inSido, matchRegion, regionQuery, textMentions, shortRegion, type Sido } from './regions';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const stripTags = (s: string) =>
@@ -19,10 +20,10 @@ const compact = (d: string) => d.replace(/-/g, '');
 /** 기간 겹침 여부 (YYYY-MM-DD 문자열 비교) */
 export const overlaps = (s: string, e: string, ps: string, pe: string) => Boolean(s) && s <= pe && (e || s) >= ps;
 
-/** "진주" → ["진주시", "진주"], 시군 판별용 */
-export function regionNames(region: string) {
-  const r = region.replace(/(시|군)$/, '');
-  return [r];
+function sidoOf(name?: string): Sido {
+  const s = findSido(name || '경상남도');
+  if (!s) throw new Error(`알 수 없는 시·도입니다: ${name}`);
+  return s;
 }
 
 // ─────────────────────────────────────────────
@@ -32,11 +33,12 @@ export interface TourDiag {
   strategy: string; // 사용한 조회 방식
   total: number; // API가 알려 준 전체 건수
   fetched: number; // 실제로 받은 건수
-  gyeongnam: number; // 경남
+  inSido: number; // 선택 시·도
   region: number; // 선택 지역
   inPeriod: number; // 검색 기간과 겹침
-  sampleAddrs: string[]; // 경남 자료 주소 예시 (지역 판별 확인용)
-  sampleOther: string[]; // 받은 자료 예시 (경남이 0건일 때 확인용)
+  sampleAddrs: string[]; // 선택 시·도 자료 주소 예시 (지역 판별 확인용)
+  sampleOther: string[]; // 받은 자료 예시 (시·도가 0건일 때 확인용)
+  sido: string;
 }
 
 /** 항목의 필드 이름을 소문자로 통일 (버전마다 eventstartdate / eventStartDate 등 표기가 다름) */
@@ -72,19 +74,17 @@ async function tourPage(key: string, params: string, page: number, rows: number)
   return { items: items.map(lowerKeys), total: Number(body?.totalCount ?? 0) };
 }
 
-const isGyeongnam = (it: Record<string, any>, addr: string) =>
-  String(it.ldongregncd ?? '').startsWith('48') || String(it.areacode ?? '') === '36' || /경상남도|경남/.test(addr);
-
-export async function collectTour(opts: { serviceKey: string; start: string; end: string; regions: string[] }): Promise<{ sources: Omit<EvSource, 'id'>[]; diag: TourDiag }> {
+export async function collectTour(opts: { serviceKey: string; start: string; end: string; regions: string[]; sido?: string }): Promise<{ sources: Omit<EvSource, 'id'>[]; diag: TourDiag }> {
+  const sido = sidoOf(opts.sido);
   const key = opts.serviceKey.includes('%') ? opts.serviceKey : encodeURIComponent(opts.serviceKey.trim());
   // 이미 시작해 진행 중인 축제도 잡기 위해 시작일을 넉넉히 앞당기고, 기간 판단은 아래에서 직접 함
   const from = compact(addDaysYmd(opts.start, -120));
   const ROWS = 100;
-  const diag: TourDiag = { strategy: '', total: 0, fetched: 0, gyeongnam: 0, region: 0, inPeriod: 0, sampleAddrs: [], sampleOther: [] };
+  const diag: TourDiag = { strategy: '', total: 0, fetched: 0, inSido: 0, region: 0, inPeriod: 0, sampleAddrs: [], sampleOther: [], sido: sido.short };
 
-  // 1차: 경남(법정동 시도코드 48)만 조회 → 0건이면 2차: 전국 조회 후 주소로 거름
+  // 1차: 선택 시·도 법정동 코드로 조회 (강원·전북은 새·옛 코드 모두) → 시·도 자료가 없으면 전국 조회 후 주소로 거름
   const strategies = [
-    { name: '경남 지역코드 조회', params: `&eventStartDate=${from}&lDongRegnCd=48`, maxPages: 10 },
+    ...sido.ldong.map((c) => ({ name: `${sido.short} 지역코드(${c}) 조회`, params: `&eventStartDate=${from}&lDongRegnCd=${c}`, maxPages: 10 })),
     { name: '전국 조회 후 주소로 거름', params: `&eventStartDate=${from}`, maxPages: 25 },
   ];
   let all: Record<string, any>[] = [];
@@ -105,7 +105,7 @@ export async function collectTour(opts: { serviceKey: string; start: string; end
     }
     diag.strategy = st.name;
     diag.total = total;
-    if (all.some((it) => isGyeongnam(it, `${it.addr1 ?? ''} ${it.addr2 ?? ''}`))) break;
+    if (all.some((it) => inSido(sido, `${it.addr1 ?? ''} ${it.addr2 ?? ''}`, it))) break;
   }
   diag.fetched = all.length;
 
@@ -114,11 +114,11 @@ export async function collectTour(opts: { serviceKey: string; start: string; end
   for (const it of all) {
     const addr = `${it.addr1 ?? ''} ${it.addr2 ?? ''}`.trim();
     if (diag.sampleOther.length < 5) diag.sampleOther.push(`${stripTags(it.title)} | ${addr || '(주소 없음)'} | 지역코드 ${it.ldongregncd ?? it.areacode ?? '-'}`);
-    if (!isGyeongnam(it, addr)) continue;
-    diag.gyeongnam++;
+    if (!inSido(sido, addr, it)) continue;
+    diag.inSido++;
     if (diag.sampleAddrs.length < 8) diag.sampleAddrs.push(addr || stripTags(it.title));
     const title = stripTags(it.title);
-    const region = opts.regions.find((r) => regionNames(r).some((n) => addr.includes(n) || title.includes(n)));
+    const region = matchRegion(sido, opts.regions, addr, title);
     if (!region) continue;
     diag.region++;
     const s = ymd(String(it.eventstartdate ?? ''));
@@ -147,7 +147,7 @@ export async function collectTour(opts: { serviceKey: string; start: string; end
 
 /** 진단 정보를 한 줄로 */
 export const tourDiagText = (d: TourDiag) =>
-  `${d.strategy}: 받은 자료 ${d.fetched}건(전체 ${d.total}) → 경남 ${d.gyeongnam} → 선택 지역 ${d.region} → 기간 내 ${d.inPeriod}`;
+  `${d.strategy}: 받은 자료 ${d.fetched}건(전체 ${d.total}) → ${d.sido} ${d.inSido} → 선택 지역 ${d.region} → 기간 내 ${d.inPeriod}`;
 
 // ─────────────────────────────────────────────
 // 1-2) 전국문화축제표준데이터 (공공데이터포털, 지자체 등록)
@@ -158,7 +158,8 @@ export interface StdDiag {
   raw: string; // 0건일 때 응답 앞부분 (원인 확인용)
   total: number;
   fetched: number;
-  gyeongnam: number;
+  inSido: number;
+  sido: string;
   region: number;
   inPeriod: number;
   lastYear: number;
@@ -172,7 +173,8 @@ function anyYmd(v: unknown) {
 }
 const shiftYear = (d: string, n: number) => (d ? `${Number(d.slice(0, 4)) + n}${d.slice(4)}` : d);
 
-export async function collectStd(opts: { serviceKey: string; start: string; end: string; regions: string[] }): Promise<{ sources: Omit<EvSource, 'id'>[]; diag: StdDiag }> {
+export async function collectStd(opts: { serviceKey: string; start: string; end: string; regions: string[]; sido?: string }): Promise<{ sources: Omit<EvSource, 'id'>[]; diag: StdDiag }> {
+  const sido = sidoOf(opts.sido);
   const key = opts.serviceKey.includes('%') ? opts.serviceKey : encodeURIComponent(opts.serviceKey.trim());
   const all: Record<string, any>[] = [];
   let total = 0;
@@ -214,17 +216,17 @@ export async function collectStd(opts: { serviceKey: string; start: string; end:
     }
     if (all.length) break;
   }
-  const diag: StdDiag = { resultCode, resultMsg, raw: all.length ? '' : raw, total, fetched: all.length, gyeongnam: 0, region: 0, inPeriod: 0, lastYear: 0, sample: [] };
+  const diag: StdDiag = { resultCode, resultMsg, raw: all.length ? '' : raw, total, fetched: all.length, inSido: 0, sido: sido.short, region: 0, inPeriod: 0, lastYear: 0, sample: [] };
   const out: Omit<EvSource, 'id'>[] = [];
   const seen = new Set<string>();
   for (const it of all) {
     const addr = `${it.rdnmadr ?? ''} ${it.lnmadr ?? ''}`.trim();
     const where = `${addr} ${it.instt_nm ?? ''} ${it.opar ?? ''}`;
     if (diag.sample.length < 5) diag.sample.push(`${stripTags(it.fstvlnm)} | ${it.instt_nm ?? ''} | ${it.fstvlstartdate ?? ''}`);
-    if (!/경상남도|경남/.test(where)) continue;
-    diag.gyeongnam++;
+    if (!inSido(sido, addr || `${it.instt_nm ?? ''}`, it) && !inSido(sido, String(it.instt_nm ?? ''))) continue;
+    diag.inSido++;
     const title = stripTags(it.fstvlnm);
-    const region = opts.regions.find((r) => regionNames(r).some((n) => where.includes(n) || title.includes(n)));
+    const region = matchRegion(sido, opts.regions, `${addr} ${it.instt_nm ?? ''}`, title);
     if (!region) continue;
     diag.region++;
     const s = anyYmd(it.fstvlstartdate);
@@ -269,7 +271,7 @@ export async function collectStd(opts: { serviceKey: string; start: string; end:
 }
 
 export const stdDiagText = (d: StdDiag) =>
-  `받은 자료 ${d.fetched}건(전체 ${d.total}) → 경남 ${d.gyeongnam} → 선택 지역 ${d.region} → 기간 내 ${d.inPeriod}${d.lastYear ? ` (+작년 같은 시기 ${d.lastYear}건, 올해 일정 미확인)` : ''}` +
+  `받은 자료 ${d.fetched}건(전체 ${d.total}) → ${d.sido} ${d.inSido} → 선택 지역 ${d.region} → 기간 내 ${d.inPeriod}${d.lastYear ? ` (+작년 같은 시기 ${d.lastYear}건, 올해 일정 미확인)` : ''}` +
   (d.fetched ? '' : ` · 결과코드 ${d.resultCode || '-'} ${d.resultMsg} · 응답: ${d.raw || '(빈 응답)'}`);
 
 // ─────────────────────────────────────────────
@@ -295,12 +297,14 @@ export async function collectNews(opts: {
   regions: string[];
   keywords: string[];
   perQuery?: number;
+  sido?: string;
 }): Promise<{ sources: Omit<EvSource, 'id'>[]; failed: number }> {
+  const sido = sidoOf(opts.sido);
   const per = opts.perQuery ?? 40;
   // 행사 안내 기사는 보통 행사 1~2달 전에 나오므로 게시일 범위를 넓게 잡음
   const from = addDays(opts.start, -60);
   const to = addDays(opts.end, 7);
-  const jobs = opts.regions.flatMap((r) => opts.keywords.map((k) => ({ region: r, q: `${r} ${k}` })));
+  const jobs = opts.regions.flatMap((r) => opts.keywords.map((k) => ({ region: r, q: `${regionQuery(sido, r)} ${k}` })));
   const byUrl = new Map<string, Omit<EvSource, 'id'>>();
   let failed = 0;
   let i = 0;
@@ -326,7 +330,7 @@ export async function collectNews(opts: {
           const title = stripTags(it.title);
           const snippet = stripTags(it.description);
           const text = `${title} ${snippet}`;
-          if (!regionNames(job.region).some((n) => text.includes(n))) continue; // 지역명이 없는 기사 제외
+          if (!textMentions(sido, job.region, text)) continue; // 지역명이 없는 기사 제외
           const link = String(it.originallink || it.link);
           const prev = byUrl.get(link);
           if (prev) continue;
@@ -406,16 +410,19 @@ export async function collectGov(opts: {
   maxUses: number;
   fetchPage?: (url: string) => Promise<string>; // 페이지 본문 가져오기 (서버에서 주입)
   timeBudgetMs?: number;
+  sido?: string;
 }): Promise<{ sources: Omit<EvSource, 'id'>[]; searches: number; diag: GovDiag }> {
+  const sido = sidoOf(opts.sido);
+  const rq = (r: string) => regionQuery(sido, r);
   const t0 = Date.now();
   const budget = opts.timeBudgetMs ?? 50_000;
   const client = new Anthropic({ apiKey: opts.apiKey });
   const months = monthsBetween(opts.start, opts.end);
   const monthWords = months.map((m) => `${m}월`).join('·');
-  const prompt = `${opts.start} ~ ${opts.end} 기간(${monthWords})에 경상남도 ${opts.regions.join(', ')}에서 열리거나 진행 중인 ${opts.keywords.join(', ')} 정보를 지자체·문화기관 공식 웹사이트에서 찾으세요.
+  const prompt = `${opts.start} ~ ${opts.end} 기간(${monthWords})에 ${sido.name} ${opts.regions.join(', ')}에서 열리거나 진행 중인 ${opts.keywords.join(', ')} 정보를 지자체·문화기관 공식 웹사이트에서 찾으세요.
 
 검색 방법
-- 시·군마다 따로 검색하세요. 예: "${opts.regions[0]} ${months[0]}월 ${opts.keywords[0]}", "${opts.regions[0]} ${opts.keywords[0]} 일정", "${opts.regions[0]} 문화행사 ${months[0]}월", "${opts.regions[0]} 공연 전시 안내"
+- 시·군·구마다 따로 검색하세요. 예: "${rq(opts.regions[0])} ${months[0]}월 ${opts.keywords[0]}", "${rq(opts.regions[0])} ${opts.keywords[0]} 일정", "${rq(opts.regions[0])} 문화행사 ${months[0]}월", "${rq(opts.regions[0])} 공연 전시 안내"
 - 검색 결과가 없으면 검색어를 짧게 바꿔 다시 검색하세요.
 
 답변 형식
@@ -429,7 +436,7 @@ export async function collectGov(opts: {
       name: 'web_search',
       max_uses: opts.maxUses,
       allowed_domains: opts.domains.map((d) => d.domain),
-      user_location: { type: 'approximate', region: 'Gyeongsangnam-do', country: 'KR', timezone: 'Asia/Seoul' },
+      user_location: { type: 'approximate', country: 'KR', timezone: 'Asia/Seoul' },
     },
   ];
   const messages: any[] = [{ role: 'user', content: prompt }];
@@ -441,6 +448,12 @@ export async function collectGov(opts: {
       msg = await client.messages.create({ model: opts.model, max_tokens: 4000, tools, messages } as any);
     } catch (e: any) {
       const m = String(e?.message ?? e);
+      const allow: string[] = tools[0].allowed_domains;
+      if (e?.status === 400 && /domain/i.test(m) && allow.includes('go.kr') && allow.length > 1) {
+        tools[0].allowed_domains = allow.filter((d) => d !== 'go.kr'); // go.kr 전체 검색이 거부되면 지정 도메인만으로 재시도
+        turn--;
+        continue;
+      }
       if (e?.status === 400 && /web search|web_search/i.test(m) && /enable|disabled|not allowed/i.test(m)) throw new Error('Claude 웹 검색이 꺼져 있습니다. Claude Console(platform.claude.com) 설정에서 웹 검색을 허용하세요.');
       if (e?.status === 400 && /domain/i.test(m)) throw new Error(`지자체 도메인 설정 오류: ${m}`);
       if (e?.status === 401) throw new Error('Claude API 키가 올바르지 않습니다.');
@@ -479,7 +492,7 @@ export async function collectGov(opts: {
       try {
         host = new URL(url).hostname.replace(/^www\./, '');
       } catch {}
-      const region = opts.domains.find((d) => host && (host === d.domain || host.endsWith(`.${d.domain}`)))?.region ?? '';
+      const region = opts.domains.find((d) => d.region && host && (host === d.domain || host.endsWith(`.${d.domain}`)))?.region ?? '';
       byUrl.set(url, { kind: 'gov', title: stripTags(title || host), url, publisher: host, date: pageAgeToYmd(pageAge), snippet: '', region, quotes: [], claims: [] });
     }
     return byUrl.get(url)!;
@@ -563,22 +576,29 @@ function pageAgeToYmd(s?: string) {
 }
 
 /**
- * 설정의 "지역:도메인" 줄 → 선택 지역의 도메인 목록 (+ 경남 공통)
- * 한 지역에 여러 줄 가능 (예: 진주:jinju.go.kr / 진주:jinjuart.or.kr)
+ * 웹 검색 허용 도메인
+ * - 기본: 전국 정부·지자체 사이트 전체(go.kr)
+ * - 설정의 "지역:도메인" 줄: 문화재단·문화예술회관 등 추가 사이트 + 결과 페이지의 지역 판별
+ *   (지역에는 시·군·구 이름, 시·도 이름, 또는 '공통'을 쓸 수 있음. 한 지역에 여러 줄 가능)
  */
-export function domainsFor(setting: string, regions: string[]) {
+export function domainsFor(setting: string, regions: string[], sidoName?: string) {
+  const sido = findSido(sidoName || '경상남도');
+  const norm = (x: string) => shortRegion(x.trim());
   const pairs: { key: string; domain: string }[] = [];
   for (const line of setting.split(/\r?\n|,/)) {
     const i = line.indexOf(':');
     if (i < 0) continue;
     const k = line.slice(0, i).trim();
     const v = line.slice(i + 1).trim();
-    if (k && v) pairs.push({ key: k.replace(/(시|군)$/, ''), domain: v.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '') });
+    if (k && v) pairs.push({ key: k, domain: v.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '') });
   }
   const out: { domain: string; region: string }[] = [];
   for (const r of regions) {
-    for (const p of pairs) if (p.key === r.replace(/(시|군)$/, '')) out.push({ domain: p.domain, region: r });
+    for (const p of pairs) if (norm(p.key) === norm(r)) out.push({ domain: p.domain, region: r });
   }
-  for (const p of pairs) if (p.key === '경남') out.push({ domain: p.domain, region: '경남' });
+  for (const p of pairs) {
+    if (p.key === '공통' || p.key === '전국' || (sido && (p.key === sido.short || p.key === sido.name))) out.push({ domain: p.domain, region: '' });
+  }
+  out.push({ domain: 'go.kr', region: '' });
   return out.filter((x, i) => out.findIndex((y) => y.domain === x.domain) === i);
 }

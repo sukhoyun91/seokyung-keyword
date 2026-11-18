@@ -39,14 +39,14 @@ export async function POST(req: Request, { params }: Ctx) {
 
     if (step === 'tour') {
       if (!s.tour_api_key) throw new HttpError(400, 'TourAPI 인증키가 설정되지 않았습니다. 관리자 설정에서 입력하거나 이 출처를 끄세요.');
-      const { sources: found, diag } = await collectTour({ serviceKey: s.tour_api_key, start: r.period_start, end: r.period_end, regions: r.regions });
+      const { sources: found, diag } = await collectTour({ serviceKey: s.tour_api_key, start: r.period_start, end: r.period_end, regions: r.regions, sido: r.options?.sido });
       const sources = renumber([...keep('tour'), ...found]);
       count = found.length;
       message = tourDiagText(diag);
       await saveFields(id, { sources, steps: { ...steps, tour: { status: 'done', count, message, at: new Date().toISOString() } } });
     } else if (step === 'std') {
       if (!s.tour_api_key) throw new HttpError(400, '공공데이터포털 인증키가 설정되지 않았습니다. 관리자 설정에서 입력하거나 이 출처를 끄세요.');
-      const { sources: found, diag } = await collectStd({ serviceKey: s.tour_api_key, start: r.period_start, end: r.period_end, regions: r.regions });
+      const { sources: found, diag } = await collectStd({ serviceKey: s.tour_api_key, start: r.period_start, end: r.period_end, regions: r.regions, sido: r.options?.sido });
       const sources = renumber([...keep('std'), ...found]);
       count = found.length;
       message = stdDiagText(diag);
@@ -59,6 +59,7 @@ export async function POST(req: Request, { params }: Ctx) {
         start: r.period_start,
         end: r.period_end,
         regions: r.regions,
+        sido: r.options?.sido,
         keywords: r.keywords,
       });
       const sources = renumber([...keep('news'), ...found]);
@@ -67,14 +68,14 @@ export async function POST(req: Request, { params }: Ctx) {
       await saveFields(id, { sources, steps: { ...steps, news: { status: 'done', count, message, at: new Date().toISOString() } } });
     } else if (step === 'gov') {
       if (!s.anthropic_api_key) throw new HttpError(400, 'Claude API 키가 설정되지 않았습니다.');
-      const domains = domainsFor(s.gov_domains, r.regions);
-      if (!domains.length) throw new HttpError(400, '선택한 지역의 지자체 도메인이 관리자 설정에 없습니다.');
+      const domains = domainsFor(s.gov_domains, r.regions, r.options?.sido);
       const { sources: found, diag } = await collectGov({
         apiKey: s.anthropic_api_key,
         model: s.claude_model || 'claude-haiku-5-5',
         start: r.period_start,
         end: r.period_end,
         regions: r.regions,
+        sido: r.options?.sido,
         keywords: r.keywords,
         domains,
         maxUses: Math.min(20, Math.max(1, Number(s.event_web_search_max) || 8)),
@@ -97,6 +98,7 @@ export async function POST(req: Request, { params }: Ctx) {
         start: r.period_start,
         end: r.period_end,
         regions: r.regions,
+        sido: r.options?.sido,
         keywords: r.keywords,
         extra: r.options?.extra ?? '',
       });
