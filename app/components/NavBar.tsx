@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { SessionUser } from '@/lib/auth';
 import { APP_VERSION, BUILD_ID } from '@/lib/version';
 
-export default function NavBar({ user, active }: { user: SessionUser; active: 'home' | 'admin' | 'ads' | 'events' }) {
+export default function NavBar({ user, active }: { user: SessionUser; active: 'home' | 'admin' | 'builder' | 'ads' | 'events' }) {
   const [pwOpen, setPwOpen] = useState(false);
 
   async function logout() {
@@ -17,6 +17,7 @@ export default function NavBar({ user, active }: { user: SessionUser; active: 'h
         <div className="nav-inner">
           <span className="logo">서경방송<small>마케팅 도구</small><small className="ver" title={BUILD_ID ? `배포 ${BUILD_ID}` : ''}>v{APP_VERSION}</small></span>
           <a href="/" className={active === 'home' ? 'active' : ''}>키워드 분석</a>
+          <a href="/builder" className={active === 'builder' ? 'active' : ''}>원천자료 엑셀작성</a>
           <a href="/ads" className={active === 'ads' ? 'active' : ''}>검색광고 보고서</a>
           <a href="/events" className={active === 'events' ? 'active' : ''}>지역 행사 정보</a>
           {user.role === 'admin' && <a href="/admin" className={active === 'admin' ? 'active' : ''}>관리자</a>}

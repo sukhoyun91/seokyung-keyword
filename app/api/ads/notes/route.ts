@@ -57,3 +57,43 @@ export async function PUT(req: Request) {
     return errorResponse(e);
   }
 }
+
+/**
+ * 엑셀 전체 업로드용 일괄 저장 (세금계산서·쿠폰·비고 + 그룹 설정). 담당자 의견은 건드리지 않습니다.
+ * body: { accountId, months: [{month, tax_invoice, coupon, note}], groups?: {month, list:[{ad_group, daily_budget, region_target}]} }
+ */
+export async function POST(req: Request) {
+  try {
+    await requireUser();
+    await ensureAdsSchema();
+    const b = await req.json();
+    const accountId = Number(b.accountId);
+    const acc = await query('SELECT 1 FROM ad_accounts WHERE id = $1', [accountId]);
+    if (!acc.length) throw new HttpError(404, '광고주를 찾을 수 없습니다.');
+    const months = (Array.isArray(b.months) ? b.months : []).filter((m: any) => /^\d{4}-\d{2}$/.test(String(m?.month))).slice(0, 240);
+    const q: { text: string; params: unknown[] }[] = [];
+    for (const m of months) {
+      q.push({
+        text: `INSERT INTO ad_monthly_notes (account_id, month, tax_invoice, coupon, note) VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT (account_id, month) DO UPDATE SET tax_invoice = EXCLUDED.tax_invoice, coupon = EXCLUDED.coupon,
+                 note = CASE WHEN EXCLUDED.note <> '' THEN EXCLUDED.note ELSE ad_monthly_notes.note END, updated_at = NOW()`,
+        params: [accountId, `${m.month}-01`, numOrNull(m.tax_invoice), numOrNull(m.coupon), String(m.note ?? '').slice(0, 2000)],
+      });
+    }
+    const g = b.groups;
+    if (g && /^\d{4}-\d{2}$/.test(String(g.month)) && Array.isArray(g.list)) {
+      for (const x of g.list.slice(0, 100)) {
+        if (!x?.ad_group) continue;
+        q.push({
+          text: `INSERT INTO ad_group_settings (account_id, month, ad_group, daily_budget, region_target) VALUES ($1, $2, $3, $4, $5)
+                 ON CONFLICT (account_id, month, ad_group) DO UPDATE SET daily_budget = EXCLUDED.daily_budget, region_target = EXCLUDED.region_target`,
+          params: [accountId, `${g.month}-01`, String(x.ad_group).slice(0, 200), numOrNull(x.daily_budget), String(x.region_target ?? '').slice(0, 200)],
+        });
+      }
+    }
+    if (q.length) await transaction(q);
+    return Response.json({ ok: true, months: months.length });
+  } catch (e) {
+    return errorResponse(e);
+  }
+}

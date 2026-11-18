@@ -247,3 +247,17 @@ button { white-space: nowrap; }
 .gov-debug pre { white-space: pre-wrap; font-family: inherit; font-size: .8rem; margin: 2px 0 0; max-height: 220px; overflow: auto; }
 .gov-debug table { margin: 4px 0 8px; }
 .src-ref.k-std { color: #0f766e; border-color: #99d5cc; background: #effaf8; }
+
+/* ── 원천자료 엑셀작성 */
+.builder { grid-template-columns: 420px 1fr; }
+@media (max-width: 900px) { .builder { grid-template-columns: 1fr; } }
+.kind-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.kind-table td, .kind-table th { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+.kind-table th { font-weight: 600; color: var(--muted); font-size: .8rem; }
+.kind-table input { padding: 5px 8px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 700px) { .row2 { grid-template-columns: 1fr; } }
+.done-list { margin: 8px 0; padding-left: 4px; list-style: none; font-size: .86rem; line-height: 1.7; }
+.save-box { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--line); }
+.save-box h3 { margin: 0 0 4px; }
+button.link { background: none; border: 0; padding: 0 4px; color: var(--brand); cursor: pointer; font-size: .82rem; text-decoration: underline; }

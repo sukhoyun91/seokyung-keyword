@@ -15,7 +15,14 @@ interface Account {
   lastUpload: { uploaded_at: string; name: string } | null;
 }
 
-type Pending = ParsedFile & { targetId: number | null; error?: string; status?: 'wait' | 'saving' | 'done' | 'fail'; progress?: string };
+type Pending = ParsedFile & {
+  targetId: number | null;
+  error?: string;
+  status?: 'wait' | 'saving' | 'done' | 'fail';
+  progress?: string;
+  /** 보고서 엑셀 전체 업로드: 세금계산서·비고·그룹 설정 (첫 항목에만) */
+  extra?: import('@/lib/xlsx/importWorkbook').WorkbookNotes;
+};
 
 const CHUNK = 5000;
 
@@ -81,6 +88,21 @@ export default function AdsHome({ isAdmin }: { isAdmin: boolean }) {
     const out: Pending[] = [];
     for (const f of Array.from(list)) {
       try {
+        // 서경엔카형 누적 보고서 엑셀이면 시트별로 나눠 읽기 (과거 자료 한 번에 올리기)
+        if (/\.xlsx$/i.test(f.name)) {
+          const { readReportWorkbook } = await import('@/lib/xlsx/importWorkbook');
+          const wbk = await readReportWorkbook(await f.arrayBuffer(), f.name);
+          if (wbk) {
+            wbk.files.forEach((p, k) => {
+              if (k === 0) {
+                p.warnings.push(`보고서 엑셀 전체 업로드: ${wbk.lastMonth}까지. 엑셀에는 계정 번호가 없어 선택한 광고주로 저장합니다. 이 파일에 들어 있는 달은 기존 자료를 덮어씁니다.`);
+                if (wbk.notes.months.length) p.warnings.push(`세금계산서·비고 ${wbk.notes.months.length}개월, 하루예산·지역타겟도 함께 저장합니다.`);
+              }
+              out.push({ ...p, targetId: selId, status: 'wait', extra: k === 0 ? wbk.notes : undefined });
+            });
+            continue;
+          }
+        }
         const p = await readAdFile(f);
         const matched = p.customerId ? byCid.get(p.customerId) : undefined;
         out.push({ ...p, targetId: matched?.id ?? (p.customerId ? null : selId), status: 'wait' });
@@ -129,6 +151,10 @@ export default function AdsHome({ isAdmin }: { isAdmin: boolean }) {
             replaceMonths: parts[k].replace,
             log: k === parts.length - 1 ? { months: p.months, rowCount: p.rows.length } : undefined,
           });
+        }
+        if (p.extra) {
+          set({ progress: '세금계산서·비고' });
+          await api('/api/ads/notes', 'POST', { accountId: p.targetId, months: p.extra.months, groups: p.extra.groups });
         }
         set({ status: 'done', progress: undefined });
         touched.add(p.targetId);
@@ -236,6 +262,7 @@ export default function AdsHome({ isAdmin }: { isAdmin: boolean }) {
               {reading ? '파일을 읽는 중…' : <><b>파일 여러 개를 한 번에</b> 끌어 놓거나 클릭해서 선택 (csv, xlsx)</>}
               <div className="hint" style={{ marginTop: 4 }}>
                 계정·캠페인·광고그룹·매체·키워드·검색어 보고서. 종류와 광고주는 파일 내용으로 자동 판별합니다. 같은 달을 다시 올리면 그 달 자료만 바뀝니다.
+                <br />'원천자료 엑셀작성'에서 만든 <b>보고서 엑셀(누적본)</b>을 올리면 과거 달까지 한 번에 들어갑니다.
               </div>
             </div>
             <input ref={fileInput} type="file" hidden multiple accept=".csv,.xlsx,.txt" onChange={(e) => { pickFiles(e.target.files); e.target.value = ''; }} />
