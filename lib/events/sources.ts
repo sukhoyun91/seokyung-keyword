@@ -63,9 +63,10 @@ async function tourPage(key: string, params: string, page: number, rows: number)
     throw new Error(`TourAPI 응답 오류 (${res.status}): ${stripTags(text).slice(0, 150)}`);
   }
   const j = JSON.parse(text);
-  const header = j?.response?.header;
+  const root = j?.response ?? j; // API마다 response로 감싸는 경우와 아닌 경우가 있음
+      const header = root?.header;
   if (header?.resultCode && header.resultCode !== '0000') throw new Error(`TourAPI 오류: ${header.resultMsg} (${header.resultCode})`);
-  const body = j?.response?.body;
+  const body = root?.body;
   let items = body?.items?.item ?? body?.items ?? [];
   if (!Array.isArray(items)) items = items && typeof items === 'object' ? [items] : [];
   return { items: items.map(lowerKeys), total: Number(body?.totalCount ?? 0) };
@@ -198,12 +199,13 @@ export async function collectStd(opts: { serviceKey: string; start: string; end:
         throw new Error(`문화축제 표준데이터 응답 오류 (HTTP ${res.status} ${code} ${msg}): ${stripTags(text).slice(0, 150)}`);
       }
       const j = JSON.parse(text);
-      const header = j?.response?.header;
+      const root = j?.response ?? j; // API마다 response로 감싸는 경우와 아닌 경우가 있음
+      const header = root?.header;
       resultCode = String(header?.resultCode ?? '00');
       resultMsg = String(header?.resultMsg ?? '');
       if (resultCode === '03') break; // 데이터 없음
       if (!['00', '0', '0000'].includes(resultCode)) throw new Error(`문화축제 표준데이터 오류: ${resultMsg} (${resultCode})`);
-      const body = j?.response?.body;
+      const body = root?.body;
       let items = body?.items?.item ?? body?.items ?? [];
       if (!Array.isArray(items)) items = items && typeof items === 'object' ? [items] : [];
       total = Number(body?.totalCount ?? 0);

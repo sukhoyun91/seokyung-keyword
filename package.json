@@ -1,6 +1,6 @@
 {
   "name": "seokyung-keyword",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "description": "서경방송 마케팅 도구 (키워드 분석 · 검색광고 월간 보고서 · 지역 행사 정보 수집)",
   "scripts": {
