@@ -24,7 +24,7 @@ function download(data: Uint8Array, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-export default function BuilderHome() {
+export default function BuilderHome({ embedded = false }: { embedded?: boolean }) {
   const [tpl, setTpl] = useState<{ name: string; data: ArrayBuffer; info: TemplateInfo } | null>(null);
   const [tplErr, setTplErr] = useState('');
   const [csvs, setCsvs] = useState<CsvItem[]>([]);
@@ -185,11 +185,17 @@ export default function BuilderHome() {
   const ready = problems.length === 0 && !busy;
 
   return (
-    <div className="container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
-        <h1>원천자료 엑셀작성</h1>
-        <span className="hint">지난달 보고서 엑셀 + 이번 달 네이버 CSV → 이번 달 보고서 엑셀. 파일은 이 컴퓨터 브라우저 안에서만 처리됩니다.</span>
-      </div>
+    <div className={embedded ? '' : 'container'}>
+      {embedded ? (
+        <p className="hint" style={{ margin: '0 0 10px' }}>
+          결재 첨부용 <b>서경엔카 양식 엑셀</b>이 필요할 때: 지난달 양식 엑셀 + 이번 달 네이버 CSV → 이번 달 양식 엑셀. (차트·피벗 유지, 파일은 브라우저 안에서만 처리)
+        </p>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
+          <h1>결재 양식 엑셀 갱신</h1>
+          <span className="hint">지난달 보고서 엑셀 + 이번 달 네이버 CSV → 이번 달 보고서 엑셀. 파일은 이 컴퓨터 브라우저 안에서만 처리됩니다.</span>
+        </div>
+      )}
 
       <div className="grid2 builder">
         <div className="input-col">
@@ -326,19 +332,19 @@ export default function BuilderHome() {
                 )}
 
                 <div className="save-box">
-                  <h3>검색광고 보고서에도 저장</h3>
+                  <h3>DB에도 저장</h3>
                   <p className="hint" style={{ marginTop: 0 }}>
-                    이번 달 CSV와 위 입력값을 검색광고 보고서에 바로 넣습니다. (엑셀 전체를 다시 올릴 필요 없음 · 같은 달 자료는 덮어씀)
+                    이번 달 CSV와 위 입력값을 DB에 바로 저장합니다. 검색광고 보고서는 이 DB 자료로 만들어집니다. (같은 달 자료는 덮어씀)
                   </p>
                   <div className="btn-row">
                     <select value={accId ?? ''} onChange={(e) => setAccId(Number(e.target.value) || null)} style={{ padding: '6px 8px' }}>
-                      <option value="">광고주 선택</option>
+                      <option value="">광고 계정 선택</option>
                       {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.customer_id})</option>)}
                     </select>
                     <button className="primary" onClick={saveToReport} disabled={!accId || !!busy}>저장</button>
                     {saveMsg?.ok && accId && <a href={`/ads/report?account=${accId}&month=${result.month}`}><button>보고서 보기</button></a>}
                   </div>
-                  {!accounts.length && <div className="hint">검색광고 보고서에 광고주가 없습니다. 먼저 등록해 주세요.</div>}
+                  {!accounts.length && <div className="hint">등록된 광고 계정이 없습니다. '업로드' 탭 왼쪽에서 관계사·계정을 먼저 등록해 주세요.</div>}
                   {saveMsg && <div className={`msg ${saveMsg.ok ? 'ok' : 'err'}`}>{saveMsg.text}</div>}
                 </div>
               </>

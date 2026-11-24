@@ -143,7 +143,7 @@ export default function AdminPanel({ meId }: { meId: number }) {
   return (
     <div className="container">
       <h1>관리자</h1>
-      {msg && <div className={`msg ${msg.ok ? 'ok' : 'err'}`} style={{ position: 'sticky', top: 8, zIndex: 5 }}>{msg.text}</div>}
+      {msg && <div className={`msg ${msg.ok ? 'ok' : 'err'}`} style={{ position: 'sticky', top: 68, zIndex: 5 }}>{msg.text}</div>}
 
       {/* ── 계정 관리 */}
       <div className="panel">

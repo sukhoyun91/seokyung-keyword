@@ -14,7 +14,13 @@ const toM = (r: any): M => ({ imp: Number(r.imp) || 0, clk: Number(r.clk) || 0, 
 export async function buildReport(accountId: number, month: string): Promise<AdReport> {
   await ensureAdsSchema();
   if (!/^\d{4}-\d{2}$/.test(month)) throw new HttpError(400, '월 형식이 올바르지 않습니다.');
-  const acc = (await query<{ id: number; name: string; customer_id: string }>('SELECT id, name, customer_id FROM ad_accounts WHERE id = $1', [accountId]))[0];
+  const acc = (
+    await query<{ id: number; name: string; customer_id: string; company: string | null; logo: string | null }>(
+      `SELECT a.id, a.name, a.customer_id, c.name AS company, c.logo
+         FROM ad_accounts a LEFT JOIN ad_companies c ON c.id = a.company_id WHERE a.id = $1`,
+      [accountId],
+    )
+  )[0];
   if (!acc) throw new HttpError(404, '광고주를 찾을 수 없습니다.');
   const prev = prevMonthOf(month);
   const until = `${month}-01`;

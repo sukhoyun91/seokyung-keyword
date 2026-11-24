@@ -61,7 +61,14 @@ async function callOnce(hints: string[], creds: NaverCreds, attempt = 0): Promis
     return callOnce(hints, creds, attempt + 1);
   }
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
+    // 응답에 키 원문이 들어 있으므로 가려서 보여 줌
+    const body = (await res.text().catch(() => '')).replace(/[0-9a-f]{24,}/gi, (k) => `${k.slice(0, 4)}…${k.slice(-4)}`);
+    if (res.status === 401 || res.status === 403) {
+      const hint = !/^\d+$/.test(creds.customerId.trim())
+        ? `고객 ID '${creds.customerId}'는 숫자가 아닙니다. 로그인 아이디가 아니라 검색광고 화면 오른쪽 위(또는 도구 → API 사용 관리)에 보이는 숫자 고객 ID(예: 1234567)를 넣어 주세요.`
+        : '고객 ID·액세스 라이선스·비밀키가 같은 계정에서 발급된 것인지 확인하세요. 키를 다시 발급했다면 새 키로 바꿔 넣어야 합니다.';
+      throw new Error(`네이버 검색광고 인증 실패 (${res.status}). ${hint}`);
+    }
     throw new Error(`네이버 검색광고 API 오류 (${res.status}): ${body.slice(0, 200)}`);
   }
   const json = await res.json();

@@ -14,7 +14,7 @@ export interface MonthTotal extends M {
 }
 
 export interface AdReport {
-  account: { id: number; name: string; customer_id: string };
+  account: { id: number; name: string; customer_id: string; company: string | null; logo: string | null };
   month: string;
   prevMonth: string;
   months: string[];

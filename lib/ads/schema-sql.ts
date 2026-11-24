@@ -64,4 +64,16 @@ CREATE TABLE IF NOT EXISTS ad_group_settings (
   region_target VARCHAR(200) NOT NULL DEFAULT '',
   PRIMARY KEY (account_id, month, ad_group)
 );
+-- 관계사 (서경방송·서경엔카 등). 광고 계정은 관계사 아래에 둡니다
+CREATE TABLE IF NOT EXISTS ad_companies (
+  id          SERIAL PRIMARY KEY,
+  name        VARCHAR(100) NOT NULL UNIQUE,
+  logo        TEXT         NOT NULL DEFAULT '',
+  memo        TEXT         NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES ad_companies(id) ON DELETE SET NULL;
+-- 예전에 등록한 광고주는 같은 이름의 관계사로 옮김 (한 번만 실행되는 효과)
+INSERT INTO ad_companies (name) SELECT DISTINCT name FROM ad_accounts WHERE company_id IS NULL ON CONFLICT (name) DO NOTHING;
+UPDATE ad_accounts a SET company_id = c.id FROM ad_companies c WHERE a.company_id IS NULL AND c.name = a.name;
 `;

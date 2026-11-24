@@ -136,11 +136,12 @@ export default function AdReportView({ accountId, month, userName }: { accountId
         <span className="spacer" />
         <button className="accent" onClick={() => window.print()}>인쇄 / PDF 저장</button>
       </div>
-      {flash && <div className={`msg ${flash.ok ? 'ok' : 'err'} no-print`} style={{ position: 'sticky', top: 8, zIndex: 5 }}>{flash.text}</div>}
+      {flash && <div className={`msg ${flash.ok ? 'ok' : 'err'} no-print`} style={{ position: 'sticky', top: 68, zIndex: 5 }}>{flash.text}</div>}
 
       {/* ── 표지 */}
       <header className="rp-head">
-        <div className="rp-kicker">검색광고 운영 결과 보고</div>
+        {r.account.logo && <img className="rp-logo" src={r.account.logo} alt={r.account.company ?? ''} />}
+        <div className="rp-kicker">{r.account.company ? `${r.account.company} · ` : ''}검색광고 운영 결과 보고</div>
         <h1>{r.account.name} 네이버 검색광고 {Number(yy).toString().slice(2)}년 {Number(mm)}월 결과 보고</h1>
         <div className="hint">
           운영기간 {yy}.{mm}.01 ~ {yy}.{mm}.{lastDay(month)} · 계정 {r.account.customer_id} · 작성 {userName} · {new Date().toLocaleDateString('ko-KR')}

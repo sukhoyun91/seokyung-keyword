@@ -9,7 +9,7 @@ export const SETTING_DEFS = {
   anthropic_api_key: { label: 'Claude API 키', secret: true, default: '' },
   claude_model: { label: 'Claude 모델', secret: false, default: 'claude-haiku-5-5' },
   naver_account_label: { label: '네이버 검색광고 계정(아이디 표시용)', secret: false, default: '' },
-  naver_customer_id: { label: '네이버 고객 ID (CUSTOMER_ID)', secret: false, default: '' },
+  naver_customer_id: { label: '네이버 고객 ID (CUSTOMER_ID · 숫자, 로그인 아이디 아님)', secret: false, default: '' },
   naver_access_license: { label: '네이버 액세스 라이선스', secret: true, default: '' },
   naver_secret_key: { label: '네이버 비밀키', secret: true, default: '' },
   naver_hub_client_id: { label: 'API HUB Client ID', secret: false, default: '' },

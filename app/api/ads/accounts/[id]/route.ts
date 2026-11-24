@@ -15,6 +15,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
       await query('UPDATE ad_accounts SET name = $1 WHERE id = $2', [body.name.trim(), id]);
     }
     if (typeof body.memo === 'string') await query('UPDATE ad_accounts SET memo = $1 WHERE id = $2', [body.memo, id]);
+    if (body.company_id !== undefined) await query('UPDATE ad_accounts SET company_id = $1 WHERE id = $2', [Number(body.company_id) || null, id]);
     if (typeof body.active === 'boolean') await query('UPDATE ad_accounts SET active = $1 WHERE id = $2', [body.active, id]);
     return Response.json({ ok: true });
   } catch (e) {

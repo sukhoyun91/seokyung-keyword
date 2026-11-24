@@ -143,7 +143,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
         {res && !running && <button onClick={() => { if (confirm('수집한 자료로 AI 정리를 다시 할까요? (담당자가 뺀 항목도 다시 나올 수 있습니다)')) runPending(r, 'summarize'); }}>AI 다시 정리</button>}
         <button className="accent" onClick={() => window.print()} disabled={!res}>인쇄 / PDF 저장</button>
       </div>
-      {flash && <div className={`msg ${flash.ok ? 'ok' : 'err'} no-print`} style={{ position: 'sticky', top: 8, zIndex: 5 }}>{flash.text}</div>}
+      {flash && <div className={`msg ${flash.ok ? 'ok' : 'err'} no-print`} style={{ position: 'sticky', top: 68, zIndex: 5 }}>{flash.text}</div>}
 
       <header className="rp-head">
         <div className="rp-kicker">지역 축제·행사 정보 수집 보고</div>

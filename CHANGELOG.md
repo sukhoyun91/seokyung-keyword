@@ -10,6 +10,35 @@ GitHub 웹 업로드 시에는 각 버전의 **변경 파일**만 올리면 됩�
 
 ---
 
+## v1.7.0 — 2026-11-24
+**화면**
+- 상단에 서경방송 로고 추가
+- 상단 메뉴 막대 고정: 아래 내용만 스크롤 (인쇄할 때는 고정 해제)
+
+**관계사 (서경방송·관계사 공용)**
+- 관계사 → 광고 계정 구조로 변경. 관계사 추가·이름 변경·로고 등록, 관계사 아래 광고 계정 추가·소속 변경
+- 로그인은 공용이고 자료만 관계사·계정별로 구분 (관계사·계정 삭제는 관리자만)
+- 검색광고 보고서 표지에 관계사 이름과 로고 표시
+- 기존 광고주는 같은 이름의 관계사 아래로 자동으로 옮겨짐 (DB 자동 변경, 따로 할 일 없음)
+
+**원천자료 관리 (메뉴 이름 변경: 원천자료 엑셀작성 → 원천자료 관리)**
+- ① 업로드: 네이버 CSV·엑셀을 DB에 저장. 이번 달 6종 + 이전 자료('월별' CSV, 누적 보고서 엑셀)
+- ② DB 조회: 계정·캠페인·광고그룹·매체·키워드·검색어별, 기간·검색어·정렬, 합계 표시
+- ③ 엑셀 다운로드: DB → 원천자료 형식 엑셀 (월별요약 + 종류별 시트, 필터·틀 고정). 선택한 계정 또는 관계사 전체 계정
+- 결재 양식 갱신: 지난 버전의 '지난달 엑셀 + CSV → 이번 달 양식 엑셀' 기능을 탭으로 유지 (예전 주소 /builder 는 이 탭으로 이동)
+
+**검색광고 보고서**
+- 업로드 기능을 원천자료 관리로 옮기고, DB에 저장된 자료로만 보고서를 만듦
+- 관계사·계정 선택 → 월 목록 → 보고서
+
+변경 파일: `app/components/NavBar.tsx`, `app/globals.css`, `public/seokyung-logo.jpg`(새 파일), `app/data/page.tsx`(새 파일), `app/components/data/`(새 폴더: `DataHome.tsx`, `UploadTab.tsx`, `ViewTab.tsx`, `ExportTab.tsx`), `app/components/ads/directory.tsx`(새 파일), `app/components/ads/AdsHome.tsx`, `app/components/ads/AdReportView.tsx`, `app/components/builder/BuilderHome.tsx`, `app/builder/page.tsx`, `app/components/events/EventReportView.tsx`, `app/components/AdminPanel.tsx`, `app/api/ads/companies/`(새 폴더), `app/api/ads/data/route.ts`(새 파일), `app/api/ads/accounts/route.ts`, `app/api/ads/accounts/[id]/route.ts`, `lib/ads/columns.ts`(새 파일), `lib/ads/report.ts`, `lib/ads/types.ts`, `lib/ads/schema-sql.ts`, `db/schema-ads.sql`, `package.json`, `README.md`, `CHANGELOG.md`
+
+## v1.6.1 — 2026-11-24
+- 네이버 검색광고 연결 실패 안내 개선: 인증 실패(401·403) 때 원인을 한국어로 안내하고, 오류 문구에 나오던 키 원문은 앞뒤 4자리만 표시
+- 관리자 설정: 네이버 고객 ID에 숫자가 아닌 값(로그인 아이디 등)을 넣으면 저장 전에 알려 줌
+
+변경 파일: `lib/naver.ts`, `lib/settings.ts`, `app/api/admin/settings/route.ts`, `package.json`, `CHANGELOG.md`
+
 ## v1.6.0 — 2026-11-18
 **새 메뉴: 원천자료 엑셀작성 (키워드 분석과 검색광고 보고서 사이)**
 - 지난달 보고서 엑셀 + 이번 달 네이버 CSV 6종 → 이번 달 보고서 엑셀 내려받기 (결재 첨부용)
