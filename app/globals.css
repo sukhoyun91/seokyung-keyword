@@ -264,8 +264,7 @@ button.link { background: none; border: 0; padding: 0 4px; color: var(--brand); 
 
 /* ── 상단 로고 */
 .nav a.logo { display: flex; align-items: center; gap: 0; opacity: 1; text-decoration: none; }
-.nav .logo-img { background: #fff; border-radius: 8px; padding: 3px 8px; display: inline-flex; align-items: center; height: 34px; }
-.nav .logo-img img { height: 26px; width: auto; display: block; }
+.nav .logo-img { height: 26px; width: auto; display: block; margin-right: 8px; }
 @media (max-width: 1100px) { .nav-inner { overflow-x: auto; } .nav .logo small:not(.ver) { display: none; } }
 /* 보고서 표지 관계사 로고 */
 .rp-head { position: relative; }
@@ -350,3 +349,16 @@ button.link { background: none; border: 0; padding: 0 4px; color: var(--brand); 
 .rz-preview.region { cursor: crosshair; touch-action: none; outline: 2px solid #19a0ff; }
 .rz-del { border: 0; background: none; color: var(--muted); padding: 0 4px; font-size: .85rem; cursor: pointer; }
 .rz-del:hover { color: var(--err); }
+/* 자르기 */
+.rz-crop { position: absolute; inset: 0; z-index: 2; }
+.rz-crop-box { position: absolute; box-shadow: 0 0 0 9999px rgba(0,0,0,.55); outline: 2px solid #ffd400; cursor: move; }
+.rz-el:has(.rz-crop) { overflow: visible; z-index: 1001; }
+.rz-ch { position: absolute; background: #ffd400; border: 1px solid #333; }
+.rz-ch.t, .rz-ch.b { left: 50%; width: 22px; height: 6px; margin-left: -11px; cursor: ns-resize; }
+.rz-ch.t { top: -4px; } .rz-ch.b { bottom: -4px; }
+.rz-ch.l, .rz-ch.r { top: 50%; width: 6px; height: 22px; margin-top: -11px; cursor: ew-resize; }
+.rz-ch.l { left: -4px; } .rz-ch.r { right: -4px; }
+.rz-ch.tl, .rz-ch.tr, .rz-ch.bl, .rz-ch.br { width: 10px; height: 10px; }
+.rz-ch.tl { left: -5px; top: -5px; cursor: nwse-resize; } .rz-ch.br { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.rz-ch.tr { right: -5px; top: -5px; cursor: nesw-resize; } .rz-ch.bl { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.rz-crop-bar { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px dashed #d4a800; border-radius: 6px; background: #fffbe6; }

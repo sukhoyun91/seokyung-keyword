@@ -82,6 +82,9 @@ export default function BoardEditor({
   const [sel, setSel] = useState<string | null>(null);
   const [guides, setGuides] = useState<{ v: boolean; h: boolean }>({ v: false, h: false });
   const drag = useRef<Drag | null>(null);
+  // 자르기: 선택한 개체 안에서 남길 범위 (0~1 비율)
+  const [crop, setCrop] = useState<{ id: string; l: number; t: number; r: number; b: number } | null>(null);
+  const cropDrag = useRef<{ edge: string; sx: number; sy: number; start: { l: number; t: number; r: number; b: number }; w: number; h: number } | null>(null);
 
   useLayoutEffect(() => {
     const ro = new ResizeObserver(() => setBoxW(wrap.current?.clientWidth ?? 700));
@@ -92,6 +95,9 @@ export default function BoardEditor({
   const k = Math.min((boxW - 4) / board.W, maxH / board.H, 1);
 
   const selEl = board.els.find((e) => e.id === sel) ?? null;
+  useEffect(() => {
+    if (crop && crop.id !== sel) setCrop(null);
+  }, [sel]);
 
   // 변경 + 되돌리기 기록
   const commit = (els: El[], before = board.els) => onChange((b) => ({ ...b, els, past: [...b.past.slice(-49), before], future: [] }));
@@ -137,6 +143,7 @@ export default function BoardEditor({
   function down(ev: React.PointerEvent, el: El, mode: Drag['mode'], corner?: Drag['corner']) {
     ev.stopPropagation();
     ev.preventDefault();
+    if (crop) return; // 자르는 중에는 이동·크기 조정 안 함
     setSel(el.id);
     drag.current = { mode, id: el.id, corner, sx: ev.clientX, sy: ev.clientY, orig: el, before: board.els };
     (ev.target as HTMLElement).setPointerCapture?.(ev.pointerId);
@@ -193,6 +200,11 @@ export default function BoardEditor({
         e.shiftKey ? redo() : undo();
         return;
       }
+      if (crop) {
+        if (e.key === 'Enter') { e.preventDefault(); applyCrop(); }
+        if (e.key === 'Escape') { e.preventDefault(); setCrop(null); }
+        return;
+      }
       if (!sel) return;
       const step = e.shiftKey ? 10 : 1;
       const el = board.els.find((x) => x.id === sel);
@@ -206,6 +218,62 @@ export default function BoardEditor({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
+
+  function startCrop() {
+    if (!selEl || selEl.kind !== 'image') return;
+    setCrop({ id: selEl.id, l: 0, t: 0, r: 1, b: 1 });
+  }
+  function cropDown(ev: React.PointerEvent, edge: string) {
+    if (!crop) return;
+    ev.stopPropagation();
+    ev.preventDefault();
+    const el = board.els.find((e) => e.id === crop.id)!;
+    cropDrag.current = { edge, sx: ev.clientX, sy: ev.clientY, start: { ...crop }, w: el.w * k, h: el.h * k };
+    (ev.target as HTMLElement).setPointerCapture?.(ev.pointerId);
+  }
+  function cropMove(ev: React.PointerEvent) {
+    const d = cropDrag.current;
+    if (!d || !crop) return;
+    ev.stopPropagation();
+    const fx = (ev.clientX - d.sx) / d.w;
+    const fy = (ev.clientY - d.sy) / d.h;
+    const s0 = d.start;
+    const MIN = 0.03;
+    const n = { ...s0 };
+    if (d.edge === 'move') {
+      const cw = s0.r - s0.l, ch = s0.b - s0.t;
+      n.l = Math.min(1 - cw, Math.max(0, s0.l + fx)); n.r = n.l + cw;
+      n.t = Math.min(1 - ch, Math.max(0, s0.t + fy)); n.b = n.t + ch;
+    } else {
+      if (d.edge.includes('l')) n.l = Math.min(s0.r - MIN, Math.max(0, s0.l + fx));
+      if (d.edge.includes('r')) n.r = Math.max(s0.l + MIN, Math.min(1, s0.r + fx));
+      if (d.edge.includes('t')) n.t = Math.min(s0.b - MIN, Math.max(0, s0.t + fy));
+      if (d.edge.includes('b')) n.b = Math.max(s0.t + MIN, Math.min(1, s0.b + fy));
+    }
+    setCrop({ ...crop, ...n });
+  }
+  function cropUp() {
+    cropDrag.current = null;
+  }
+  /** 자르기 적용: 원본 조각에서 남길 부분만 새 조각으로 만들어 바꿔 끼움 (되돌리기 가능) */
+  function applyCrop() {
+    if (!crop) return;
+    const el = board.els.find((e) => e.id === crop.id);
+    if (!el || el.kind !== 'image') return setCrop(null);
+    const p = pieces.get(el.groupId);
+    if (!p) return setCrop(null);
+    const sx = Math.round(crop.l * p.w), sy = Math.round(crop.t * p.h);
+    const sw = Math.max(1, Math.round((crop.r - crop.l) * p.w)), sh = Math.max(1, Math.round((crop.b - crop.t) * p.h));
+    const cv = document.createElement('canvas');
+    cv.width = sw;
+    cv.height = sh;
+    cv.getContext('2d')!.drawImage(p.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    const gid = `${el.groupId}~c${Date.now()}`;
+    pieces.set(gid, { canvas: cv, url: cv.toDataURL('image/png'), w: sw, h: sh, label: `${p.label} (자름)` });
+    const n: El = { ...el, groupId: gid, x: Math.round(el.x + crop.l * el.w), y: Math.round(el.y + crop.t * el.h), w: Math.max(1, Math.round((crop.r - crop.l) * el.w)), h: Math.max(1, Math.round((crop.b - crop.t) * el.h)) };
+    commit(board.els.map((e) => (e.id === el.id ? n : e)));
+    setCrop(null);
+  }
 
   async function download(type: 'image/png' | 'image/jpeg') {
     const blob = await renderBoard(board, pieces, type);
@@ -257,10 +325,10 @@ export default function BoardEditor({
               height: board.H * k,
               background: board.bgMode === 'image' && pieces.get(BG_KEY) ? `center / 100% 100% no-repeat url(${pieces.get(BG_KEY)!.url})` : board.bg,
             }}
-            onPointerDown={() => setSel(null)}
-            onPointerMove={move}
-            onPointerUp={up}
-            onPointerCancel={up}
+            onPointerDown={() => !crop && setSel(null)}
+            onPointerMove={(e) => (cropDrag.current ? cropMove(e) : move(e))}
+            onPointerUp={() => (cropDrag.current ? cropUp() : up())}
+            onPointerCancel={() => (cropDrag.current ? cropUp() : up())}
           >
             {board.els.map((e) => {
               const st = { left: e.x * k, top: e.y * k, width: e.w * k, height: e.h * k };
@@ -271,7 +339,14 @@ export default function BoardEditor({
                   ) : (
                     <div className="rz-text" style={{ fontSize: e.size * k, color: e.color, fontWeight: e.bold ? 700 : 400, lineHeight: LH, fontFamily: FONT }}>{e.text}</div>
                   )}
-                  {e.id === sel && (['nw', 'ne', 'sw', 'se'] as const).map((c) => <span key={c} className={`rz-h ${c}`} onPointerDown={(ev) => down(ev, e, 'resize', c)} />)}
+                  {e.id === sel && !crop && (['nw', 'ne', 'sw', 'se'] as const).map((c) => <span key={c} className={`rz-h ${c}`} onPointerDown={(ev) => down(ev, e, 'resize', c)} />)}
+                  {crop && crop.id === e.id && (
+                    <div className="rz-crop">
+                      <div className="rz-crop-box" style={{ left: `${crop.l * 100}%`, top: `${crop.t * 100}%`, width: `${(crop.r - crop.l) * 100}%`, height: `${(crop.b - crop.t) * 100}%` }} onPointerDown={(ev) => cropDown(ev, 'move')}>
+                        {(['t', 'b', 'l', 'r', 'tl', 'tr', 'bl', 'br'] as const).map((h) => <span key={h} className={`rz-ch ${h}`} onPointerDown={(ev) => cropDown(ev, h)} />)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -324,6 +399,20 @@ export default function BoardEditor({
                 </div>
               )}
               {zoomOf(selEl) > 1.6 && <div className="hint" style={{ color: 'var(--warn)' }}>원본보다 {zoomOf(selEl).toFixed(1)}배 커서 흐려 보일 수 있습니다.</div>}
+              {selEl.kind === 'image' && (
+                crop && crop.id === selEl.id ? (
+                  <div className="rz-crop-bar">
+                    <span className="hint">보드에서 테두리·모서리를 끌어 남길 부분을 정하세요 (안쪽을 끌면 이동).</span>
+                    <div className="btn-row">
+                      <button className="primary" onClick={applyCrop}>자르기 적용</button>
+                      <button onClick={() => setCrop({ ...crop, l: 0, t: 0, r: 1, b: 1 })}>처음대로</button>
+                      <button onClick={() => setCrop(null)}>취소</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={startCrop}>✂ 자르기</button>
+                )
+              )}
               <div className="btn-row">
                 <button onClick={() => center(selEl.id, 'x')}>가로 가운데</button>
                 <button onClick={() => center(selEl.id, 'y')}>세로 가운데</button>

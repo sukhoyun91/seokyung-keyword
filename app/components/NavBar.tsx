@@ -16,7 +16,7 @@ export default function NavBar({ user, active }: { user: SessionUser; active: 'h
       <nav className="nav no-print">
         <div className="nav-inner">
           <a href="/" className="logo" title="서경방송 마케팅 도구">
-            <span className="logo-img"><img src="/seokyung-logo.jpg" alt="서경방송" /></span>
+            <img className="logo-img" src="/seokyung-logo-white.png" alt="서경방송" />
             <small>마케팅 도구</small>
             <small className="ver" title={BUILD_ID ? `배포 ${BUILD_ID}` : ''}>v{APP_VERSION}</small>
           </a>
