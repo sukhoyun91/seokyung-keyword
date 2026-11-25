@@ -13,12 +13,14 @@ export interface Board {
   W: number;
   H: number;
   bg: string;
+  bgMode: 'solid' | 'image'; // image = 원본 배경(그라데이션)을 보드 크기로 늘림
   els: El[];
   past: El[][];
   future: El[][];
   source: '' | 'ai' | 'auto';
 }
 
+export const BG_KEY = '__background__';
 const FONT = "'Pretendard', -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
 const LH = 1.25;
 
@@ -38,10 +40,14 @@ export async function renderBoard(b: Board, pieces: Map<string, Piece>, type: 'i
   cv.width = b.W;
   cv.height = b.H;
   const ctx = cv.getContext('2d')!;
-  ctx.fillStyle = b.bg;
-  ctx.fillRect(0, 0, b.W, b.H);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+  const bgp = pieces.get(BG_KEY);
+  if (b.bgMode === 'image' && bgp) ctx.drawImage(bgp.canvas, 0, 0, b.W, b.H);
+  else {
+    ctx.fillStyle = b.bg;
+    ctx.fillRect(0, 0, b.W, b.H);
+  }
   for (const e of b.els) {
     if (e.kind === 'image') {
       const p = pieces.get(e.groupId);
@@ -214,7 +220,7 @@ export default function BoardEditor({
   // 확대율 (원본 대비)
   const zoomOf = (e: El) => (e.kind === 'image' ? e.w / (pieces.get(e.groupId)?.w || e.w) : 1);
   const onBoard = new Set(board.els.filter((e) => e.kind === 'image').map((e) => (e as any).groupId));
-  const missing = groups.filter((g) => !onBoard.has(g.id) && pieces.has(g.id));
+  const missing = groups.filter((g) => !onBoard.has(g.id) && pieces.has(g.id) && g.id !== BG_KEY);
   const outside = (e: El) => e.x < -1 || e.y < -1 || e.x + e.w > board.W + 1 || e.y + e.h > board.H + 1;
 
   return (
@@ -232,7 +238,11 @@ export default function BoardEditor({
             {missing.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
           </select>
         )}
-        <label className="chk" title="배경색">배경 <input type="color" value={board.bg} onChange={(e) => onChange((b) => ({ ...b, bg: e.target.value }))} style={{ width: 34, height: 28, padding: 0 }} /></label>
+        <select value={board.bgMode} onChange={(e) => onChange((b) => ({ ...b, bgMode: e.target.value as Board['bgMode'] }))} style={{ width: 'auto', padding: '5px 8px' }} title="보드 배경">
+          <option value="image" disabled={!pieces.has(BG_KEY)}>배경: 원본 배경 늘리기</option>
+          <option value="solid">배경: 단색</option>
+        </select>
+        {board.bgMode === 'solid' && <input type="color" value={board.bg} onChange={(e) => onChange((b) => ({ ...b, bg: e.target.value }))} style={{ width: 34, height: 28, padding: 0 }} title="배경색" />}
         <span className="rz-sep" />
         <button className="primary" onClick={() => download('image/png')} disabled={!board.els.length}>PNG</button>
         <button onClick={() => download('image/jpeg')} disabled={!board.els.length}>JPG</button>
@@ -242,7 +252,11 @@ export default function BoardEditor({
         <div ref={wrap} className="rz-stage-wrap">
           <div
             className="rz-stage"
-            style={{ width: board.W * k, height: board.H * k, background: board.bg }}
+            style={{
+              width: board.W * k,
+              height: board.H * k,
+              background: board.bgMode === 'image' && pieces.get(BG_KEY) ? `center / 100% 100% no-repeat url(${pieces.get(BG_KEY)!.url})` : board.bg,
+            }}
             onPointerDown={() => setSel(null)}
             onPointerMove={move}
             onPointerUp={up}

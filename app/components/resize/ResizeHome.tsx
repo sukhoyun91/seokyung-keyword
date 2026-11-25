@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PRESET_GROUPS, type SizePreset } from '@/lib/resize/presets';
-import { cutPiece, segment, thumbnails, type Segmentation } from '@/lib/resize/segment';
+import { backgroundCanvas, cutPiece, cutRect, segment, thumbnails, type Box, type Segmentation } from '@/lib/resize/segment';
 import { ROLE_LABEL, fallbackGroups, fallbackPlan, makeGroup, placePlan, sanitizePlan, type Group, type Plan } from '@/lib/resize/layout';
-import BoardEditor, { renderBoard, type Board, type El } from './BoardEditor';
+import BoardEditor, { BG_KEY, renderBoard, type Board, type El } from './BoardEditor';
 
 export interface Piece {
   canvas: HTMLCanvasElement;
@@ -35,6 +35,11 @@ export default function ResizeHome() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
+  const [excluded, setExcluded] = useState<Set<number>>(new Set()); // 지운 개체 (AI 변환·자동 배치에서 제외)
+  const [regionMode, setRegionMode] = useState(false);
+  const [rect, setRect] = useState<Box | null>(null); // 원본 좌표
+  const rectStart = useRef<{ x: number; y: number } | null>(null);
+  const live = (s: Segmentation) => s.objects.filter((o) => !excluded.has(o.id));
 
   const allPresets = useMemo(() => [...PRESET_GROUPS.flatMap((g) => g.items), ...customs], [customs]);
 
@@ -68,12 +73,17 @@ export default function ResizeHome() {
   function runSegment(img: HTMLImageElement, th: number, sp: number, resetBoards: boolean) {
     const s = segment(img, { threshold: th, spread: sp });
     setSeg(s);
+    setExcluded(new Set());
+    const bgc = backgroundCanvas(s);
+    pieces.current.set(BG_KEY, { canvas: bgc, url: bgc.toDataURL('image/png'), w: bgc.width, h: bgc.height, label: '배경' });
     const run = ++RUN;
     const gs = fallbackGroups(s.objects, s.srcW, s.srcH).map((g) => ({ ...g, id: `r${run}:${g.id}` }));
     buildPieces(gs, s);
     setGroups(gs);
-    if (resetBoards) setBoards((bs) => bs.map((b) => ({ ...b, bg: hex(s.bg), els: [], past: [], future: [], source: '' })));
-    if (s.bgShare < 0.6) setMsg({ ok: false, text: `배경이 단색이 아닌 것 같습니다 (테두리 중 배경색 ${Math.round(s.bgShare * 100)}%). 개체 분리가 부정확할 수 있으니 결과를 확인하세요.` });
+    setBoards((bs) => bs.map((b) => ({ ...b, bg: hex(s.bg), bgMode: s.gradient ? 'image' : 'solid', ...(resetBoards ? { els: [], past: [], future: [], source: '' as const } : {}) })));
+    if (s.bgShare < 0.6)
+      setMsg({ ok: false, text: `배경이 복잡해 보입니다 (테두리 중 배경으로 판정 ${Math.round(s.bgShare * 100)}%). 뭉친 개체는 '영역 지정'으로 직접 잘라 쓰세요.` });
+    else if (s.gradient) setMsg({ ok: true, text: '그라데이션 배경을 인식했습니다. 보드 배경은 원본 배경을 늘려서 채웁니다 (보드 위 메뉴에서 단색으로 바꿀 수 있음).' });
   }
 
   // 원본 미리보기 + 묶음 상자
@@ -88,12 +98,70 @@ export default function ResizeHome() {
     ctx.drawImage(img, 0, 0, cv.width, cv.height);
     const colors = ['#ff2d95', '#00c2ff', '#ffd400', '#7cff4f', '#ff7a00', '#b18cff', '#00ffc8', '#ff4d4d'];
     groups.forEach((g, i) => {
+      if (g.id === BG_KEY) return;
       ctx.strokeStyle = colors[i % colors.length];
       ctx.lineWidth = 2;
       ctx.setLineDash(g.role === 'decoration' ? [4, 3] : []);
       ctx.strokeRect(g.box.x * k, g.box.y * k, g.box.w * k, g.box.h * k);
     });
-  }, [seg, groups, file]);
+    if (rect) {
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ffffff';
+      ctx.fillStyle = 'rgba(25,160,255,.25)';
+      ctx.fillRect(rect.x * k, rect.y * k, rect.w * k, rect.h * k);
+      ctx.strokeRect(rect.x * k, rect.y * k, rect.w * k, rect.h * k);
+    }
+  }, [seg, groups, file, rect]);
+
+  // 원본 미리보기에서 영역 긋기 → 개체 만들기
+  const toSrc = (ev: React.PointerEvent<HTMLCanvasElement>) => {
+    const cv = ev.currentTarget;
+    const r = cv.getBoundingClientRect();
+    return { x: ((ev.clientX - r.left) / r.width) * (seg?.srcW ?? 1), y: ((ev.clientY - r.top) / r.height) * (seg?.srcH ?? 1) };
+  };
+  function regionDown(ev: React.PointerEvent<HTMLCanvasElement>) {
+    if (!regionMode || !seg) return;
+    ev.currentTarget.setPointerCapture(ev.pointerId);
+    rectStart.current = toSrc(ev);
+    setRect({ ...rectStart.current, w: 0, h: 0 });
+  }
+  function regionMove(ev: React.PointerEvent<HTMLCanvasElement>) {
+    const a = rectStart.current;
+    if (!a) return;
+    const b = toSrc(ev);
+    setRect({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) });
+  }
+  function regionUp() {
+    const r = rect;
+    rectStart.current = null;
+    if (!r || !seg || !imgRef.current || r.w < 8 || r.h < 8) return setRect(null);
+    const n = groups.filter((g) => g.label.startsWith('지정 영역')).length + 1;
+    const id = `r${++RUN}:area`;
+    const p = cutRect(imgRef.current, seg, r);
+    pieces.current.set(id, { canvas: p.canvas, url: p.canvas.toDataURL('image/png'), w: p.box.w, h: p.box.h, label: `지정 영역 ${n}` });
+    const g: Group = { id, label: `지정 영역 ${n}`, role: 'other', objectIds: [], box: p.box, edge: { l: p.box.x <= 3, t: p.box.y <= 3, r: p.box.x + p.box.w >= seg.srcW - 3, b: p.box.y + p.box.h >= seg.srcH - 3 } };
+    setGroups((gs) => [...gs, g]);
+    // 지금 보고 있는 보드에 바로 넣기 (원본과 같은 비율 위치)
+    setBoards((bs) =>
+      bs.map((b) => {
+        if (b.key !== active) return b;
+        const s = Math.min(b.W / seg.srcW, b.H / seg.srcH);
+        const el: El = { id: `${id}#0`, kind: 'image', groupId: id, w: Math.round(p.box.w * s), h: Math.round(p.box.h * s), x: Math.round(p.box.x * s + (b.W - seg.srcW * s) / 2), y: Math.round(p.box.y * s + (b.H - seg.srcH * s) / 2) };
+        return { ...b, els: [...b.els, el], past: [...b.past, b.els], future: [] };
+      }),
+    );
+    setRect(null);
+    setPv((v) => v + 1);
+    setMsg({ ok: true, text: `'지정 영역 ${n}'을(를) 만들었습니다.${boards.some((b) => b.key === active) ? ' 지금 보드에 넣었습니다.' : ''} 다른 보드에는 '빠진 개체 넣기'로 넣으세요.` });
+  }
+
+  // 묶음(개체) 지우기: 모든 보드에서 빼고, AI 변환·자동 배치에서도 제외
+  function removeGroup(g: Group) {
+    setGroups((gs) => gs.filter((x) => x.id !== g.id));
+    setExcluded((ex) => new Set([...ex, ...g.objectIds]));
+    setBoards((bs) => bs.map((b) => (b.els.some((e) => e.kind === 'image' && e.groupId === g.id) ? { ...b, els: b.els.filter((e) => !(e.kind === 'image' && e.groupId === g.id)), past: [...b.past, b.els], future: [] } : b)));
+  }
 
   // ── 사이즈 → 보드
   function makeBoards() {
@@ -101,7 +169,7 @@ export default function ResizeHome() {
     if (!sel.length) return setMsg({ ok: false, text: '사이즈를 하나 이상 고르세요.' });
     setBoards((old) => {
       const keep = old.filter((b) => picked.has(b.key));
-      const add = sel.filter((p) => !old.some((b) => b.key === p.key)).map((p) => ({ key: p.key, label: p.label, W: p.w, H: p.h, bg: seg ? hex(seg.bg) : '#ffffff', els: [], past: [], future: [], source: '' as const }));
+      const add = sel.filter((p) => !old.some((b) => b.key === p.key)).map((p) => ({ key: p.key, label: p.label, W: p.w, H: p.h, bg: seg ? hex(seg.bg) : '#ffffff', bgMode: (seg?.gradient ? 'image' : 'solid') as Board['bgMode'], els: [], past: [], future: [], source: '' as const }));
       const next = [...keep, ...add];
       if (!next.some((b) => b.key === active)) setActive(next[0]?.key ?? '');
       return next;
@@ -150,7 +218,7 @@ export default function ResizeHome() {
           marked: th.marked,
           srcW: seg.srcW,
           srcH: seg.srcH,
-          objects: seg.objects.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })),
+          objects: live(seg).map(({ id, x, y, w, h }) => ({ id, x, y, w, h })),
           sizes: targets.map((b) => ({ key: b.key, w: b.W, h: b.H })),
         }),
       });
@@ -162,10 +230,11 @@ export default function ResizeHome() {
       if (!res.ok) throw new Error(j.error || `오류 (${res.status})`);
       const run = ++RUN;
       const gs: Group[] = j.groups.map((g: any) =>
-        makeGroup(`r${run}:${g.id}`, g.label, g.role, seg.objects.filter((o) => g.objectIds.includes(o.id)), seg.srcW, seg.srcH),
-      );
+        makeGroup(`r${run}:${g.id}`, g.label, g.role, live(seg).filter((o) => g.objectIds.includes(o.id)), seg.srcW, seg.srcH),
+      ).filter((g: Group) => g.objectIds.length);
+      const areas = groups.filter((g) => g.label.startsWith('지정 영역'));
       buildPieces(gs, seg);
-      setGroups(gs);
+      setGroups([...gs, ...areas]);
       // AI 가 준 묶음 id 를 화면 내부 id(r번호:id)로 바꿈
       const pre = (id: string) => `r${run}:${id}`;
       const plans: Record<string, Plan> = {};
@@ -184,9 +253,9 @@ export default function ResizeHome() {
     if (!seg) return;
     const targets = boards.filter((b) => !onlyActive || b.key === active).map((b) => b.key);
     const run = ++RUN;
-    const gs = fallbackGroups(seg.objects, seg.srcW, seg.srcH).map((g) => ({ ...g, id: `r${run}:${g.id}` }));
+    const gs = fallbackGroups(live(seg), seg.srcW, seg.srcH).map((g) => ({ ...g, id: `r${run}:${g.id}` }));
     buildPieces(gs, seg);
-    setGroups(gs);
+    setGroups([...gs, ...groups.filter((g) => g.label.startsWith('지정 영역'))]);
     applyPlans(gs, {}, targets, 'auto');
   }
 
@@ -243,9 +312,21 @@ export default function ResizeHome() {
 
           {seg && (
             <>
-              <canvas ref={previewRef} className="rz-preview" />
+              <canvas
+                ref={previewRef}
+                className={`rz-preview ${regionMode ? 'region' : ''}`}
+                onPointerDown={regionDown}
+                onPointerMove={regionMove}
+                onPointerUp={regionUp}
+              />
+              <div className="btn-row" style={{ marginTop: 6 }}>
+                <button className={regionMode ? 'primary' : ''} onClick={() => { setRegionMode(!regionMode); setRect(null); }}>
+                  {regionMode ? '영역 지정 중… (끝내기)' : '✂ 영역 지정해서 개체 만들기'}
+                </button>
+              </div>
+              {regionMode && <div className="hint">원본 위에서 끌어 사각형을 그으면 그 부분이 개체가 됩니다. 뭉쳐서 나뉘지 않는 부분을 직접 자를 때 쓰세요.</div>}
               <div className="hint" style={{ margin: '6px 0' }}>
-                {seg.srcW}×{seg.srcH} · 배경색 <span className="swatch" style={{ background: hex(seg.bg) }} /> {hex(seg.bg)} · 개체 {seg.objects.length}개 · 묶음 {groups.length}개
+                {seg.srcW}×{seg.srcH} · 배경 {seg.gradient ? '그라데이션' : <><span className="swatch" style={{ background: hex(seg.bg) }} /> {hex(seg.bg)}</>} · 개체 {live(seg).length}개 · 묶음 {groups.length}개
               </div>
               <details>
                 <summary className="hint">개체 찾기 설정</summary>
@@ -263,6 +344,7 @@ export default function ResizeHome() {
                       {p && <img src={p.url} alt="" />}
                       <span>{g.label}</span>
                       <span className="hint">{ROLE_LABEL[g.role]}</span>
+                      <button className="rz-del" title="이 개체 지우기 (모든 보드에서 빠지고 AI 변환에서도 제외)" onClick={() => removeGroup(g)}>✕</button>
                     </div>
                   );
                 })}

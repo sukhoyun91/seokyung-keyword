@@ -347,3 +347,6 @@ button.link { background: none; border: 0; padding: 0 4px; color: var(--brand); 
 .rz-layer img { width: 40px; height: 26px; object-fit: contain; background: #27403b; border-radius: 3px; }
 .rz-layer .rz-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rz-t { width: 40px; text-align: center; font-weight: 700; }
+.rz-preview.region { cursor: crosshair; touch-action: none; outline: 2px solid #19a0ff; }
+.rz-del { border: 0; background: none; color: var(--muted); padding: 0 4px; font-size: .85rem; cursor: pointer; }
+.rz-del:hover { color: var(--err); }
