@@ -34,7 +34,7 @@ export function Delta({ cur, prev, kind = 'num', invert = false }: { cur: number
   return (
     <span className={`delta ${cls}`}>
       {d > 0 ? '▲' : '▼'}
-      {kind === 'pct' ? `${Math.abs(d).toFixed(2)}%p` : n0(Math.abs(d))}
+      {kind === 'pct' ? `${Math.abs(d).toFixed(Math.abs(d) < 0.1 ? 3 : 2)}%p` : n0(Math.abs(d))}
     </span>
   );
 }

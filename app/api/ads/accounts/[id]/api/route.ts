@@ -17,11 +17,19 @@ export async function PUT(req: Request, { params }: Ctx) {
       await query("UPDATE ad_accounts SET api_license = '', api_secret = '' WHERE id = $1", [id]);
       return Response.json({ ok: true });
     }
-    const license = String(b.license || '').trim();
-    const secret = String(b.secret || '').trim();
+    let license = String(b.license || '').replace(/\s/g, '');
+    let secret = String(b.secret || '').replace(/\s/g, '');
     if (!license || !secret) throw new HttpError(400, '액세스 라이선스와 비밀키를 모두 입력하세요.');
+    // 액세스 라이선스는 보통 0100000000… 로 시작하는 긴 16진수, 비밀키는 AQAA… 로 시작해 == 로 끝나는 문자열
+    const looksLicense = (v: string) => /^[0-9a-f]{40,}$/i.test(v);
+    const looksSecret = (v: string) => /[+/=]|^AQAA/.test(v) && !looksLicense(v);
+    let swapped = false;
+    if (looksSecret(license) && looksLicense(secret)) {
+      [license, secret] = [secret, license];
+      swapped = true;
+    }
     await query('UPDATE ad_accounts SET api_license = $1, api_secret = $2 WHERE id = $3', [encrypt(license), encrypt(secret), id]);
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, swapped, warn: looksLicense(license) ? '' : '액세스 라이선스 모양이 보통과 다릅니다 (0100000000… 로 시작하는 긴 숫자·영문). 다시 확인하세요.' });
   } catch (e) {
     return errorResponse(e);
   }

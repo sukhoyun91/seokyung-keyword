@@ -4,6 +4,7 @@ import { ctr, cpc, monthLabel, type AdReport, type M } from '@/lib/ads/types';
 import { api, n0, p2, rk, Delta, MetricCells, DeltaRows, METRIC_HEADS } from './fmt';
 import TrendChart from './TrendChart';
 import KeywordPivot from './KeywordPivot';
+import ExecDashboard from './ExecDashboard';
 
 const sumM = (list: M[]): M => {
   const imp = list.reduce((a, b) => a + b.imp, 0);
@@ -16,6 +17,21 @@ const sumM = (list: M[]): M => {
     rank: ri ? Math.round((rw.reduce((a, b) => a + (b.rank ?? 0) * Math.max(b.imp, 1), 0) / ri) * 10) / 10 : null,
   };
 };
+
+const rate = (c: number, p: number | undefined) => (p ? `${c >= p ? '+' : ''}${(((c - p) / p) * 100).toFixed(1)}%` : '신규');
+const diffTxt = (c: number, p: number) => `${n0(p)} → ${n0(c)} (${c - p >= 0 ? '+' : ''}${n0(c - p)})`;
+
+/** 전월·당월·증감 3칸 */
+function Cmp3({ c, p, hasPrev }: { c: number | undefined; p: number | undefined; hasPrev: boolean }) {
+  return (
+    <>
+      <td className="num muted-cell">{hasPrev ? n0(p ?? 0) : '-'}</td>
+      <td className="num">{c == null ? '-' : n0(c)}</td>
+      <td className="num">{hasPrev ? <Delta cur={c ?? 0} prev={p ?? 0} /> : <span className="muted">-</span>}</td>
+    </>
+  );
+}
+const CMP_SUB = (n: number) => Array.from({ length: n }).flatMap((_, i) => [<th key={`p${i}`} className="num sub">전월</th>, <th key={`c${i}`} className="num sub">당월</th>, <th key={`d${i}`} className="num sub">증감</th>]);
 
 function lastDay(month: string) {
   const [y, m] = month.split('-').map(Number);
@@ -120,6 +136,35 @@ export default function AdReportView({ accountId, month, userName }: { accountId
   const kwGroups = [...new Set(r.keywords.map((k) => k.ad_group))];
   const curTypes = r.campaignTypes.types.filter((t) => cs(t, month) || cs(t, r.prevMonth));
   const stGroups = [...new Set(r.searchTerms.typeSummary.map((s) => s.ad_group))];
+  const prevLabel = monthLabel(r.prevMonth);
+  const prevHasData = r.months.includes(r.prevMonth);
+  // 광고그룹 전월/당월 비교 (두 달 다 없으면 제외)
+  const grpCmp = r.adGroups.groups
+    .map((g) => ({ g, c: gs(g.ad_group, month), p: gs(g.ad_group, r.prevMonth) }))
+    .filter((x) => x.c || x.p);
+  const changes: string[] = [];
+  if (cur && prev) {
+    changes.push(`전체: 노출 ${rate(cur.imp, prev.imp)}, 클릭 ${rate(cur.clk, prev.clk)}, 클릭률 ${p2(ctr(prev))} → ${p2(ctr(cur))}, 평균클릭비용 ${n0(cpc(prev))}원 → ${n0(cpc(cur))}원 (${rate(cpc(cur), cpc(prev))}), 광고비 ${rate(cur.cost, prev.cost)}`);
+    for (const t of curTypes) {
+      const c = cs(t, month), p = cs(t, r.prevMonth);
+      if (c && p) changes.push(`${t}: 클릭 ${diffTxt(c.clk, p.clk)}건, 광고비 ${rate(c.cost, p.cost)}`);
+      else if (c) changes.push(`${t}: 당월 신규 운영 (클릭 ${n0(c.clk)}건)`);
+      else if (p) changes.push(`${t}: 당월 미운영 (전월 클릭 ${n0(p.clk)}건)`);
+    }
+    const both = grpCmp.filter((x) => x.c && x.p).map((x) => ({ name: x.g.ad_group, d: x.c!.clk - x.p!.clk, c: x.c!, p: x.p! }));
+    const ups = [...both].filter((x) => x.d > 0).sort((a, b) => b.d - a.d).slice(0, 3);
+    const downs = [...both].filter((x) => x.d < 0).sort((a, b) => a.d - b.d).slice(0, 3);
+    if (ups.length) changes.push(`클릭 증가 광고그룹: ${ups.map((x) => `${x.name} ${diffTxt(x.c.clk, x.p.clk)}`).join(' · ')}`);
+    if (downs.length) changes.push(`클릭 감소 광고그룹: ${downs.map((x) => `${x.name} ${diffTxt(x.c.clk, x.p.clk)}`).join(' · ')}`);
+    const newG = grpCmp.filter((x) => x.c && !x.p).map((x) => x.g.ad_group);
+    const stopG = grpCmp.filter((x) => !x.c && x.p).map((x) => x.g.ad_group);
+    if (newG.length) changes.push(`신규 광고그룹: ${newG.join(', ')}`);
+    if (stopG.length) changes.push(`당월 미운영 광고그룹 (전월만 실적): ${stopG.join(', ')}`);
+    const kwUp = r.keywords.filter((k) => k.clk - k.prevClk > 0).sort((a, b) => b.clk - b.prevClk - (a.clk - a.prevClk)).slice(0, 3);
+    if (kwUp.length) changes.push(`클릭 증가 키워드: ${kwUp.map((k) => `${k.keyword} ${diffTxt(k.clk, k.prevClk)}`).join(' · ')}`);
+    const kwNew = r.keywords.filter((k) => k.keyword !== '-' && !k.prevImp && !k.prevClk && k.imp > 0).length;
+    if (kwNew) changes.push(`전월 노출이 없던 키워드 중 당월 노출된 키워드 ${kwNew}개`);
+  }
 
   return (
     <div className="container report">
@@ -151,9 +196,18 @@ export default function AdReportView({ accountId, month, userName }: { accountId
         )}
       </header>
 
+      {/* ── 한눈에 보기 (임원용 시각화) */}
+      <ExecDashboard r={r} month={month} shown={shown} />
+
       {/* ── 1. 요약 */}
       <section className="rp-sec">
-        <h2><span className="no">1</span>광고 성과 요약</h2>
+        <h2><span className="no">1</span>광고 성과 요약 <span className="hint">{monthLabel(month)} vs 전월 {prevLabel}</span></h2>
+        {!hasPrev && (
+          <div className="msg warn">
+            비교할 전월({prevLabel}) 자료가 DB에 없습니다{prevHasData ? ' (계정·캠페인 합계 없음)' : ''}. 이 보고서는 전월 대비 비교로 작성됩니다 —
+            <a href="/data"> 원천자료 관리</a>에서 {prevLabel} 파일을 올리거나 네이버 API로 가져온 뒤 다시 열어 주세요.
+          </div>
+        )}
         {cur && (
           <div className="kpis">
             {[
@@ -169,6 +223,12 @@ export default function AdReportView({ accountId, month, userName }: { accountId
                 <div className="kpi-d">{hasPrev ? <>전월 대비 {k.d}</> : <span className="muted">전월 자료 없음</span>}</div>
               </div>
             ))}
+          </div>
+        )}
+        {changes.length > 0 && (
+          <div className="info-box cmp-box">
+            <b>전월 대비 주요 변화</b>
+            <ul>{changes.map((c, i) => <li key={i}>{c}</li>)}</ul>
           </div>
         )}
         {curTypes.length > 0 && (
@@ -256,30 +316,51 @@ export default function AdReportView({ accountId, month, userName }: { accountId
       {/* ── 5. 광고그룹별 */}
       {r.adGroups.groups.length > 0 && (
         <section className="rp-sec">
-          <h2><span className="no">5</span>광고그룹별 운영 현황</h2>
+          <h2><span className="no">5</span>광고그룹별 운영 현황 <span className="hint">전월 대비</span></h2>
           <div className="table-wrap">
-            <table className="rp-table">
+            <table className="rp-table cmp">
               <thead>
-                <tr><th>캠페인 유형</th><th>광고그룹</th>{METRIC_HEADS.map((h) => <th key={h} className="num">{h}</th>)}<th className="num">하루예산</th><th>지역타겟</th></tr>
+                <tr>
+                  <th rowSpan={2}>캠페인 유형</th><th rowSpan={2}>광고그룹</th>
+                  <th colSpan={3} className="grp">노출수</th><th colSpan={3} className="grp">클릭수</th><th colSpan={3} className="grp">광고비</th>
+                  <th colSpan={2} className="grp">클릭률</th><th colSpan={2} className="grp">평균노출순위</th>
+                  <th rowSpan={2} className="num">하루예산</th><th rowSpan={2}>지역타겟</th>
+                </tr>
+                <tr>{CMP_SUB(3)}<th className="num sub">전월</th><th className="num sub">당월</th><th className="num sub">전월</th><th className="num sub">당월</th></tr>
               </thead>
               <tbody>
-                {r.adGroups.groups.map((g) => {
-                  const s = r.adGroups.settings.find((x) => x.ad_group === g.ad_group);
+                {grpCmp.map(({ g, c, p }) => {
+                  const st = r.adGroups.settings.find((x) => x.ad_group === g.ad_group);
                   return (
                     <tr key={g.ad_group}>
-                      <td>{g.type || g.campaign}</td>
-                      <td><b>{g.ad_group}</b></td>
-                      <MetricCells m={gs(g.ad_group, month)} />
-                      <td className="num">{n0(s?.daily_budget)}</td>
-                      <td>{s?.region_target || '-'}</td>
+                      <td>{g.type || g.campaign || '-'}</td>
+                      <td><b>{g.ad_group}</b>{hasPrev && !p && <span className="tag new">신규</span>}{!c && <span className="tag stop">미운영</span>}</td>
+                      <Cmp3 c={c?.imp} p={p?.imp} hasPrev={hasPrev} />
+                      <Cmp3 c={c?.clk} p={p?.clk} hasPrev={hasPrev} />
+                      <Cmp3 c={c?.cost} p={p?.cost} hasPrev={hasPrev} />
+                      <td className="num muted-cell">{p ? p2(ctr(p)) : '-'}</td>
+                      <td className="num">{c ? p2(ctr(c)) : '-'}</td>
+                      <td className="num muted-cell">{rk(p?.rank)}</td>
+                      <td className="num">{rk(c?.rank)}</td>
+                      <td className="num">{n0(st?.daily_budget)}</td>
+                      <td>{st?.region_target || '-'}</td>
                     </tr>
                   );
                 })}
-                <tr className="sum-row">
-                  <td colSpan={2}>합계</td>
-                  <MetricCells m={sumM(r.adGroups.groups.map((g) => gs(g.ad_group, month)).filter(Boolean) as M[])} rank={false} />
-                  <td /><td /><td />
-                </tr>
+                {(() => {
+                  const sc = sumM(grpCmp.map((x) => x.c).filter(Boolean) as M[]);
+                  const sp = sumM(grpCmp.map((x) => x.p).filter(Boolean) as M[]);
+                  return (
+                    <tr className="sum-row">
+                      <td colSpan={2}>합계</td>
+                      <Cmp3 c={sc.imp} p={sp.imp} hasPrev={hasPrev} />
+                      <Cmp3 c={sc.clk} p={sp.clk} hasPrev={hasPrev} />
+                      <Cmp3 c={sc.cost} p={sp.cost} hasPrev={hasPrev} />
+                      <td className="num">{hasPrev ? p2(ctr(sp)) : '-'}</td><td className="num">{p2(ctr(sc))}</td>
+                      <td /><td /><td /><td />
+                    </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
@@ -298,7 +379,7 @@ export default function AdReportView({ accountId, month, userName }: { accountId
           <div className="table-wrap">
             <table className="rp-table">
               <thead>
-                <tr><th>광고그룹</th><th>매체</th>{METRIC_HEADS.map((h) => <th key={h} className="num">{h}</th>)}<th className="num">전월 대비 클릭</th></tr>
+                <tr><th>광고그룹</th><th>매체</th>{METRIC_HEADS.map((h) => <th key={h} className="num">{h}</th>)}<th className="num">전월 노출</th><th className="num">노출 증감</th><th className="num">전월 클릭</th><th className="num">클릭 증감</th><th className="num">전월 광고비</th><th className="num">광고비 증감</th></tr>
               </thead>
               <tbody>
                 {mediaGroups.map((g) =>
@@ -311,7 +392,12 @@ export default function AdReportView({ accountId, month, userName }: { accountId
                         {i === 0 && <td rowSpan={mediaNames(g).length}><b>{g}</b></td>}
                         <td>{md}</td>
                         <MetricCells m={c} />
-                        <td className="num">{c ? <Delta cur={c.clk} prev={p?.clk} /> : '-'}</td>
+                        <td className="num muted-cell">{hasPrev ? n0(p?.imp ?? 0) : '-'}</td>
+                        <td className="num">{hasPrev ? <Delta cur={c?.imp ?? 0} prev={p?.imp ?? 0} /> : '-'}</td>
+                        <td className="num muted-cell">{hasPrev ? n0(p?.clk ?? 0) : '-'}</td>
+                        <td className="num">{hasPrev ? <Delta cur={c?.clk ?? 0} prev={p?.clk ?? 0} /> : '-'}</td>
+                        <td className="num muted-cell">{hasPrev ? n0(p?.cost ?? 0) : '-'}</td>
+                        <td className="num">{hasPrev ? <Delta cur={c?.cost ?? 0} prev={p?.cost ?? 0} /> : '-'}</td>
                       </tr>
                     );
                   }),
@@ -336,7 +422,7 @@ export default function AdReportView({ accountId, month, userName }: { accountId
       {/* ── 7. 키워드 */}
       {r.keywords.length > 0 && (
         <section className="rp-sec">
-          <h2><span className="no">7</span>키워드 운영 현황 ({Number(mm)}월)</h2>
+          <h2><span className="no">7</span>키워드 운영 현황 ({Number(mm)}월, 전월 대비)</h2>
           <div className="btn-row no-print" style={{ marginBottom: 8 }}>
             <select value={kwGroup} onChange={(e) => setKwGroup(e.target.value)} style={{ width: 'auto' }}>
               <option value="">전체 광고그룹</option>
@@ -347,7 +433,7 @@ export default function AdReportView({ accountId, month, userName }: { accountId
           <div className="table-wrap">
             <table className="rp-table">
               <thead>
-                <tr><th>광고그룹</th><th>키워드</th>{METRIC_HEADS.map((h) => <th key={h} className="num">{h}</th>)}<th className="num">전월 클릭</th><th className="num">클릭 증감</th></tr>
+                <tr><th>광고그룹</th><th>키워드</th>{METRIC_HEADS.map((h) => <th key={h} className="num">{h}</th>)}<th className="num">전월 클릭</th><th className="num">클릭 증감</th><th className="num">전월 광고비</th><th className="num">광고비 증감</th></tr>
               </thead>
               <tbody>
                 {kwShown.map((k) => (
@@ -357,6 +443,8 @@ export default function AdReportView({ accountId, month, userName }: { accountId
                     <MetricCells m={k} />
                     <td className="num">{n0(k.prevClk)}</td>
                     <td className="num"><Delta cur={k.clk} prev={hasPrev ? k.prevClk : undefined} /></td>
+                    <td className="num muted-cell">{hasPrev ? n0(k.prevCost) : '-'}</td>
+                    <td className="num"><Delta cur={k.cost} prev={hasPrev ? k.prevCost : undefined} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -435,14 +523,15 @@ export default function AdReportView({ accountId, month, userName }: { accountId
           <div className="table-wrap">
             <table className="rp-table">
               <thead>
-                <tr><th>광고그룹</th><th>검색어</th><th>검색유형</th>{METRIC_HEADS.slice(0, 5).map((h) => <th key={h} className="num">{h}</th>)}<th className="num">전월 클릭</th></tr>
+                <tr><th>광고그룹</th><th>검색어</th><th>검색유형</th>{METRIC_HEADS.slice(0, 5).map((h) => <th key={h} className="num">{h}</th>)}<th className="num">전월 클릭</th><th className="num">클릭 증감</th></tr>
               </thead>
               <tbody>
                 {r.searchTerms.top.slice(0, 30).map((s) => (
                   <tr key={s.ad_group + s.term + s.search_type}>
                     <td>{s.ad_group}</td><td><b>{s.term}</b></td><td>{s.search_type}</td>
                     <MetricCells m={s} rank={false} />
-                    <td className="num">{n0(s.prevClk)}</td>
+                    <td className="num muted-cell">{n0(s.prevClk)}</td>
+                    <td className="num"><Delta cur={s.clk} prev={hasPrev ? s.prevClk : undefined} /></td>
                   </tr>
                 ))}
               </tbody>

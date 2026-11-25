@@ -367,3 +367,62 @@ button.link { background: none; border: 0; padding: 0 4px; color: var(--brand); 
 .api-split > div { background: #f7f9fc; border-radius: 8px; padding: 8px 10px; font-size: .88rem; }
 .dir-api input { width: 100%; }
 .msg.warn { background: #fff8e1; color: #7a5b00; }
+
+/* v1.9.3 전월 대비 */
+.cmp-box ul { margin: 6px 0 0; padding-left: 18px; }
+.cmp-box li { margin: 2px 0; line-height: 1.55; }
+.rp-table.cmp th.grp { text-align: center; border-bottom: 1px solid var(--line, #ddd); }
+.rp-table.cmp th.sub { font-weight: 500; font-size: 11px; }
+.rp-table .muted-cell { color: #8a8f98; }
+.tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px; font-size: 11px; font-weight: 600; vertical-align: 1px; }
+.tag.new { background: #e6f4ea; color: #1e7b34; }
+.tag.stop { background: #f1f3f5; color: #6b7280; }
+
+/* v1.9.3 한눈에 보기 */
+.exec { position: relative; }
+.exec h2 .no { font-size: .8rem; }
+.ex-headline { font-size: 1.08rem; font-weight: 700; color: var(--ink); background: linear-gradient(90deg, var(--brand-soft), #fff); border-left: 4px solid var(--brand); padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; }
+.ex-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
+@media (max-width: 900px) { .ex-tiles { grid-template-columns: repeat(2, 1fr); } }
+.ex-tile { position: relative; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 6px; background: #fff; }
+.ex-tl { color: var(--muted); font-size: .8rem; font-weight: 600; }
+.ex-tv { font-size: 1.55rem; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; margin: 4px 0 2px; }
+.ex-tv small { font-size: .8rem; font-weight: 600; color: var(--muted); margin-left: 2px; }
+.ex-td { font-size: .78rem; min-height: 20px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.ex-chip { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ex-eval { position: absolute; top: 10px; right: 10px; font-size: .7rem; font-weight: 700; padding: 0 6px; border-radius: 8px; }
+.ex-eval.g { background: #e6f4ea; color: #1e7b34; }
+.ex-eval.b { background: #fdecea; color: #b3261e; }
+.ex-eval.f { background: #f1f3f5; color: #6b7280; }
+.ex-spark { width: 100%; height: 40px; display: block; margin-top: 4px; }
+.ex-block { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; background: #fff; }
+.ex-block h3 { font-size: .95rem; margin-bottom: 4px; }
+.ex-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .78rem; color: var(--muted); margin: 4px 0 6px; }
+.ex-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.ex-multi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 900px) { .ex-multi { grid-template-columns: 1fr; } }
+.ex-ptitle { font-size: .82rem; font-weight: 700; margin-bottom: 4px; }
+.ex-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ex-grid2 > .ex-block { margin-bottom: 12px; }
+@media (max-width: 900px) { .ex-grid2 { grid-template-columns: 1fr; } }
+.exec svg text { font-family: inherit; }
+.ex-lab { font-size: 12px; fill: #1a2230; }
+.ex-lab.b { font-weight: 700; }
+.ex-lab.sm { font-size: 11px; fill: #3b4658; }
+.ex-val { font-size: 11px; fill: #3b4658; font-variant-numeric: tabular-nums; }
+.ex-dv { font-size: 11px; font-weight: 700; }
+.ex-in { font-size: 12px; font-weight: 700; }
+.ex-ax { font-size: 11px; fill: #8a93a3; }
+.ex-q { font-size: 11px; font-weight: 700; }
+.ex-q.g { fill: #1e7b34; } .ex-q.b { fill: #b3261e; }
+.ex-tip { position: absolute; z-index: 20; pointer-events: none; background: #1f2a37; color: #fff; font-size: .78rem; line-height: 1.45; padding: 7px 10px; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.18); white-space: nowrap; }
+@media print {
+  .ex-tip { display: none; }
+  .ex-tiles { grid-template-columns: repeat(5, 1fr); }
+  .ex-grid2 { grid-template-columns: 1fr 1fr; }
+  .ex-multi { grid-template-columns: repeat(3, 1fr); }
+  .exec, .exec * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .exec { break-after: page; }
+}
+.rp-table.cmp th, .rp-table.cmp td { padding: 6px 7px; font-size: .8rem; }
+.rp-table.cmp td:nth-child(2) { white-space: nowrap; }

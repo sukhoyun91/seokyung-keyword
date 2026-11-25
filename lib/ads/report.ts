@@ -30,7 +30,7 @@ export async function buildReport(accountId: number, month: string): Promise<AdR
     query(`SELECT ${MON}, level, ${AGG} FROM ad_stats WHERE account_id = $1 AND month <= $2 AND level IN ('account','campaign') GROUP BY month, level ORDER BY month`, P),
     query<{ level: string }>(`SELECT DISTINCT level FROM ad_stats WHERE account_id = $1 AND month = $2`, P),
     query(`SELECT ${MON}, COALESCE(NULLIF(campaign_type,''), campaign) AS type, ${AGG} FROM ad_stats WHERE account_id = $1 AND month <= $2 AND level = 'campaign' GROUP BY month, 2 ORDER BY month`, P),
-    query<{ campaign: string; type: string }>(`SELECT DISTINCT ON (campaign) campaign, campaign_type AS type FROM ad_stats WHERE account_id = $1 AND level = 'campaign' AND campaign_type <> '' ORDER BY campaign, month DESC`, [accountId]),
+    query<{ campaign: string; type: string }>(`SELECT DISTINCT ON (campaign) campaign, campaign_type AS type FROM ad_stats WHERE account_id = $1 AND level = 'campaign' AND campaign_type <> '' AND campaign <> '' ORDER BY campaign, month DESC`, [accountId]),
     query(`SELECT ${MON}, campaign, ad_group, ${AGG} FROM ad_stats WHERE account_id = $1 AND month <= $2 AND level = 'adgroup' GROUP BY month, campaign, ad_group ORDER BY month`, P),
     query(`SELECT ${MON}, ad_group, dim AS media, ${AGG} FROM ad_stats WHERE account_id = $1 AND month <= $2 AND level = 'media' GROUP BY month, ad_group, dim ORDER BY month`, P),
     query(
@@ -109,7 +109,7 @@ export async function buildReport(accountId: number, month: string): Promise<AdR
       };
     });
 
-  const typeOf = new Map(campTypeMap.map((c) => [c.campaign, c.type]));
+  const typeOf = new Map(campTypeMap.filter((c) => c.campaign).map((c) => [c.campaign, c.type]));
   const campSeries = (campRows as any[]).map((r) => ({ type: r.type, month: r.month, ...toM(r) }));
   const types = [...new Set(campSeries.filter((s) => s.month === month).map((s) => s.type))];
   for (const t of campSeries.map((s) => s.type)) if (!types.includes(t)) types.push(t);
@@ -117,7 +117,7 @@ export async function buildReport(accountId: number, month: string): Promise<AdR
   const groupsMap = new Map<string, { type: string; campaign: string; ad_group: string }>();
   for (const r of grpRows as any[]) {
     if (!groupsMap.has(r.ad_group) || r.month === month) {
-      groupsMap.set(r.ad_group, { type: typeOf.get(r.campaign) ?? '', campaign: r.campaign, ad_group: r.ad_group });
+      groupsMap.set(r.ad_group, { type: (r.campaign && typeOf.get(r.campaign)) || '', campaign: r.campaign, ad_group: r.ad_group });
     }
   }
   const grpSeries = (grpRows as any[]).map((r) => ({ ad_group: r.ad_group, month: r.month, ...toM(r) }));
@@ -184,9 +184,18 @@ export function summarizeForAI(r: AdReport): string {
     const f = (m: string) => r.media.find((x) => x.ad_group === g && x.media === md && x.month === m);
     L.push(line(`[매체 ${g} - ${md}]`, f(r.month), f(r.prevMonth)));
   }
-  const movers = [...r.keywords].sort((a, b) => b.clk - b.prevClk - (a.clk - a.prevClk)).slice(0, 8);
-  if (movers.length) {
-    L.push('[키워드 클릭 증가 상위] ' + movers.filter((k) => k.clk - k.prevClk > 0).map((k) => `${k.keyword}(${k.ad_group}) ${n0(k.prevClk)}→${n0(k.clk)}건`).join(', '));
+  const hasPrev = Boolean(t(r.prevMonth));
+  const kwd = (k: AdReport['keywords'][number]) => k.clk - k.prevClk;
+  const up = [...r.keywords].filter((k) => kwd(k) > 0).sort((a, b) => kwd(b) - kwd(a)).slice(0, 8);
+  const down = [...r.keywords].filter((k) => kwd(k) < 0).sort((a, b) => kwd(a) - kwd(b)).slice(0, 5);
+  if (up.length) L.push('[키워드 클릭 증가 상위] ' + up.map((k) => `${k.keyword}(${k.ad_group}) ${n0(k.prevClk)}→${n0(k.clk)}건`).join(', '));
+  if (down.length) L.push('[키워드 클릭 감소 상위] ' + down.map((k) => `${k.keyword}(${k.ad_group}) ${n0(k.prevClk)}→${n0(k.clk)}건`).join(', '));
+  if (hasPrev) {
+    const has = (g: string, m: string) => Boolean(gs(g, m));
+    const newG = r.adGroups.groups.filter((g) => has(g.ad_group, r.month) && !has(g.ad_group, r.prevMonth)).map((g) => g.ad_group);
+    const stopG = r.adGroups.groups.filter((g) => !has(g.ad_group, r.month) && has(g.ad_group, r.prevMonth)).map((g) => g.ad_group);
+    if (newG.length) L.push(`[당월 신규 광고그룹] ${newG.join(', ')}`);
+    if (stopG.length) L.push(`[당월 미운영(전월만 있음) 광고그룹] ${stopG.join(', ')}`);
   }
   if (r.searchTerms.risers.length) {
     L.push('[검색어 클릭 증가 상위] ' + r.searchTerms.risers.map((s) => `${s.term}(${s.ad_group}, ${s.search_type}) ${n0(s.prevClk)}→${n0(s.curClk)}건`).join(', '));

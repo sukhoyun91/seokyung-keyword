@@ -191,10 +191,11 @@ export function DirectoryPanel({ dir, manage, isAdmin, prefillCid, onMsg }: { di
   const saveKey = () =>
     a && keyForm &&
     run(async () => {
-      await api(`/api/ads/accounts/${a.id}/api`, 'PUT', keyForm);
+      const j = await api<{ swapped: boolean; warn: string }>(`/api/ads/accounts/${a.id}/api`, 'PUT', keyForm);
       setKeyForm(null);
       await dir.reload({ accountId: a.id });
-    }, 'API 키를 암호화해서 저장했습니다. [연결 테스트]로 확인하세요.');
+      onMsg(!j.warn, j.swapped ? '액세스 라이선스와 비밀키가 서로 바뀌어 있어 바로잡아 저장했습니다. [연결 테스트]로 확인하세요.' : j.warn || 'API 키를 암호화해서 저장했습니다. [연결 테스트]로 확인하세요.');
+    });
   const clearKey = () =>
     a && confirm('이 계정에 등록한 API 키를 지울까요?') &&
     run(async () => { await api(`/api/ads/accounts/${a.id}/api`, 'PUT', { clear: true }); await dir.reload({ accountId: a.id }); }, '지웠습니다.');
