@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const PUBLIC_PATHS = ['/login', '/api/auth/login'];
+const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/cron/']; // cron 은 CRON_SECRET 으로 따로 확인
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

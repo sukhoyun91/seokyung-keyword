@@ -10,6 +10,20 @@ GitHub 웹 업로드 시에는 각 버전의 **변경 파일**만 올리면 됩�
 
 ---
 
+## v1.9.0 — 2026-11-25
+**원천자료 관리: 파일 업로드 + 네이버 API 하이브리드**
+- 새 탭 '② 네이버 API 가져오기': 관리 API(/ncc/campaigns·adgroups·keywords) + 통계 API(/stats)로 계정·캠페인·광고그룹·키워드 월 자료 수집 → DB 누적
+  - '미리 받아 DB와 비교': 저장 전, 같은 달 DB 자료(CSV)와 종류별·캠페인 유형별·광고그룹별로 나란히 비교
+  - '가져와서 DB에 저장': 그 달의 4종만 교체 (매체·검색어 파일 자료는 그대로), 하루예산도 함께 저장 (지역타겟은 유지)
+  - 키워드 보고서의 '-' 줄(등록 키워드 밖 성과) = 광고그룹 합계 − 키워드 합계로 계산해 CSV와 같은 모양
+  - 캠페인 평균노출순위도 채워짐 (CSV 방식에서는 비어 있던 값)
+- 매체(검색/콘텐츠)·검색어는 지금처럼 '① 파일 업로드'로 (네이버 API로는 정확히 받을 수 없음)
+- 광고 계정별 네이버 API 키 등록·연결 테스트 (왼쪽 계정 상자, 암호화 저장). 키가 없으면 관리자 설정 키를 고객 ID가 같을 때 사용
+- 매월 자동 수집: 매월 2일 10:00(KST) 지난달 자료를 API 키가 있는 모든 계정에 저장 (Vercel 환경변수 CRON_SECRET 을 넣어야 동작)
+- 시험: 서명 검증까지 하는 가짜 네이버 API(10월 CSV 자료)로 수집 → 10월 CSV와 계정·캠페인·광고그룹·키워드 모두 일치 확인
+
+변경 파일: `lib/ads/naverAds.ts`(새 파일), `lib/ads/collect.ts`(새 파일), `lib/ads/collectSave.ts`(새 파일), `lib/ads/save.ts`(새 파일), `lib/ads/schema-sql.ts`, `db/schema-ads.sql`, `app/api/ads/collect/route.ts`(새 파일), `app/api/ads/accounts/[id]/api/route.ts`(새 파일), `app/api/cron/ads-collect/route.ts`(새 파일), `app/api/ads/accounts/route.ts`, `app/api/ads/upload/route.ts`, `app/components/data/ApiTab.tsx`(새 파일), `app/components/data/DataHome.tsx`, `app/components/ads/directory.tsx`, `app/globals.css`, `middleware.ts`, `vercel.json`, `package.json`, `README.md`, `CHANGELOG.md`
+
 ## v1.8.2 — 2026-11-25
 - 상단 서경방송 로고를 흰색 로고(투명 배경)로 교체 — 파란 막대 위에 흰 상자 없이 표시
 - 이미지 리사이징: 개체 자르기 추가
