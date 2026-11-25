@@ -11,6 +11,8 @@ const CUR = '#0b5cad';
 const PREV = '#c3cad6';
 const UP = '#d23c2a';
 const DOWN = '#1e5bd6';
+const COST_C = '#f47230';
+const CLK_C = '#257de0';
 
 const pct = (c: number, p: number | undefined) => (p ? ((c - p) / p) * 100 : null);
 const sgn = (v: number) => (v > 0 ? '+' : v < 0 ? '−' : '');
@@ -69,15 +71,21 @@ export default function ExecDashboard({ r, month, shown }: { r: AdReport; month:
     .slice(0, 8)
     .sort((a, b) => b.d - a.d);
 
-  // ── 5) 효율 매트릭스 (당월, 클릭 있는 그룹)
-  // 플레이스 광고는 클릭률 구조가 달라(10%대) 검색광고와 같은 축에 두면 비교가 안 되므로 제외
-  const isPlace = (t: string) => /플레이스|place/i.test(t);
-  const hasSearch = r.adGroups.groups.some((g) => !isPlace(g.type || g.campaign || g.ad_group));
-  const pts = r.adGroups.groups
-    .filter((g) => !hasSearch || !isPlace(g.type || g.campaign || g.ad_group))
-    .map((g) => ({ name: g.ad_group, m: gs(g.ad_group, month) }))
-    .filter((x) => x.m && x.m.clk > 0 && x.m.imp > 0)
-    .map((x) => ({ name: x.name, ctr: ctr(x.m!), cpc: cpc(x.m!), cost: x.m!.cost, clk: x.m!.clk }));
+  // ── 5) 광고비 비중 vs 클릭 비중 (당월)
+  const share = (() => {
+    const list = r.adGroups.groups
+      .map((g) => ({ name: g.ad_group, m: gs(g.ad_group, month) }))
+      .filter((x) => x.m && (x.m.cost > 0 || x.m.clk > 0))
+      .map((x) => ({ name: x.name, cost: x.m!.cost, clk: x.m!.clk }))
+      .sort((a, b) => b.cost - a.cost);
+    const tc = list.reduce((a, b) => a + b.cost, 0) || 1;
+    const tk = list.reduce((a, b) => a + b.clk, 0) || 1;
+    const TOP = 10;
+    const head = list.slice(0, TOP);
+    const rest = list.slice(TOP);
+    if (rest.length) head.push({ name: `기타 ${rest.length}개 그룹`, cost: rest.reduce((a, b) => a + b.cost, 0), clk: rest.reduce((a, b) => a + b.clk, 0) });
+    return head.map((x) => ({ ...x, cs: (x.cost / tc) * 100, ks: (x.clk / tk) * 100, cpc: x.clk ? x.cost / x.clk : null }));
+  })();
 
   return (
     <section className="rp-sec exec" ref={box} onMouseLeave={hide}>
@@ -144,10 +152,11 @@ export default function ExecDashboard({ r, month, shown }: { r: AdReport; month:
         )}
       </div>
 
-      {pts.length >= 2 && (
+      {share.length >= 2 && (
         <div className="ex-block">
-          <h3>광고그룹 효율 매트릭스 <span className="hint">당월 · 가로 클릭률, 세로 클릭당 비용, 원 크기 = 광고비{hasSearch ? ' · 플레이스 제외' : ''}</span></h3>
-          <Matrix pts={pts} show={show} hide={hide} />
+          <h3>광고그룹별 광고비 대비 클릭 기여도 <span className="hint">당월 · 광고비 비중보다 클릭 비중이 크면 효율이 좋은 그룹</span></h3>
+          <div className="ex-legend"><span><i style={{ background: COST_C }} />광고비 비중</span><span><i style={{ background: CLK_C }} />클릭 비중</span></div>
+          <ShareBars rows={share} show={show} hide={hide} />
         </div>
       )}
 
@@ -271,42 +280,31 @@ function Diverge({ rows, show, hide }: { rows: { name: string; d: number; p: num
   );
 }
 
-function Matrix({ pts, show, hide }: { pts: { name: string; ctr: number; cpc: number; cost: number; clk: number }[] } & TipFns) {
-  const W = 900, H = 300, L = 60, R = 20, T = 30, B = 34;
-  const iw = W - L - R, ih = H - T - B;
-  const xs = pts.map((p) => p.ctr), ys = pts.map((p) => p.cpc);
-  const pad = (lo: number, hi: number) => { const s = (hi - lo) || hi || 1; return [Math.max(0, lo - s * 0.12), hi + s * 0.12]; };
-  const [x0, x1] = pad(Math.min(...xs), Math.max(...xs));
-  const [y0, y1] = pad(Math.min(...ys), Math.max(...ys));
-  const sx = (v: number) => L + ((v - x0) / (x1 - x0 || 1)) * iw;
-  const sy = (v: number) => T + ih - ((v - y0) / (y1 - y0 || 1)) * ih;
-  const maxCost = Math.max(...pts.map((p) => p.cost), 1);
-  const rad = (c: number) => 5 + Math.sqrt(c / maxCost) * 20;
-  const med = (a: number[]) => { const s = [...a].sort((p, q) => p - q); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
-  const mx = med(xs), my = med(ys);
-  const labeled = new Set([...pts].sort((a, b) => b.cost - a.cost).slice(0, 6).map((p) => p.name));
-  const ticks = [0, 0.5, 1];
+function ShareBars({ rows, show, hide }: { rows: { name: string; cost: number; clk: number; cs: number; ks: number; cpc: number | null }[] } & TipFns) {
+  const W = 900, LW = 170, RW = 190, BH = 10, GAP = 2, ROW = 2 * BH + GAP + 14;
+  const H = rows.length * ROW + 4;
+  const max = Math.max(1, ...rows.flatMap((x) => [x.cs, x.ks]));
+  const sx = (v: number) => (v / max) * (W - LW - RW - 50);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="광고그룹 효율 매트릭스">
-      <rect x={sx(mx)} y={sy(my)} width={Math.max(0, W - R - sx(mx))} height={Math.max(0, T + ih - sy(my))} fill="#e6f4ea" opacity={0.6} />
-      <text x={W - R} y={T - 10} textAnchor="end" className="ex-q g">효율 우수 · 클릭률↑ 클릭당 비용↓ ↘</text>
-      <rect x={L} y={T} width={Math.max(0, sx(mx) - L)} height={Math.max(0, sy(my) - T)} fill="#fdecea" opacity={0.5} />
-      <text x={L + 6} y={T - 10} className="ex-q b">↖ 점검 필요 · 클릭률↓ 클릭당 비용↑</text>
-      {ticks.map((t) => (
-        <g key={t}>
-          <line x1={L} x2={W - R} y1={T + ih * (1 - t)} y2={T + ih * (1 - t)} stroke="#eef1f6" />
-          <text x={L - 6} y={T + ih * (1 - t) + 4} textAnchor="end" className="ex-ax">{n0(y0 + (y1 - y0) * t)}원</text>
-          <text x={L + iw * t} y={H - 12} textAnchor="middle" className="ex-ax">{(x0 + (x1 - x0) * t).toFixed(2)}%</text>
-        </g>
-      ))}
-      <line x1={sx(mx)} x2={sx(mx)} y1={T} y2={T + ih} stroke="#aab3c2" strokeDasharray="4 4" />
-      <line x1={L} x2={W - R} y1={sy(my)} y2={sy(my)} stroke="#aab3c2" strokeDasharray="4 4" />
-      {[...pts].sort((a, b) => b.cost - a.cost).map((p) => (
-        <g key={p.name} onMouseMove={(e) => show(e, <><b>{p.name}</b><br />클릭률 {p2(p.ctr)} · 클릭당 {n0(p.cpc)}원<br />클릭 {n0(p.clk)}건 · 광고비 {n0(p.cost)}원</>)} onMouseLeave={hide}>
-          <circle cx={sx(p.ctr)} cy={sy(p.cpc)} r={rad(p.cost)} fill={CUR} fillOpacity={0.55} stroke="#fff" strokeWidth={2} />
-          {labeled.has(p.name) && <text x={sx(p.ctr) + (sx(p.ctr) > W - 160 ? -rad(p.cost) - 6 : rad(p.cost) + 6)} y={sy(p.cpc) + 4} textAnchor={sx(p.ctr) > W - 160 ? 'end' : 'start'} className="ex-lab sm">{p.name.length > 10 ? p.name.slice(0, 10) + '…' : p.name}</text>}
-        </g>
-      ))}
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="광고그룹별 광고비 비중과 클릭 비중">
+      {rows.map((x, i) => {
+        const y = 4 + i * ROW;
+        const ratio = x.cs ? x.ks / x.cs : 0;
+        const verdict = ratio >= 1.1 ? { t: '효율 우수', c: '#1e7b34', bg: '#e6f4ea' } : ratio <= 0.9 ? { t: '효율 낮음', c: '#b3261e', bg: '#fdecea' } : { t: '보통', c: '#6b7280', bg: '#f1f3f5' };
+        return (
+          <g key={x.name} onMouseMove={(e) => show(e, <><b>{x.name}</b><br />광고비 {n0(x.cost)}원 ({x.cs.toFixed(1)}%)<br />클릭 {n0(x.clk)}건 ({x.ks.toFixed(1)}%)<br />클릭당 비용 {x.cpc == null ? '-' : `${n0(x.cpc)}원`}</>)} onMouseLeave={hide}>
+            <rect x={0} y={y - 3} width={W} height={ROW - 2} fill="transparent" />
+            <text x={LW - 10} y={y + BH + 5} textAnchor="end" className="ex-lab">{x.name.length > 14 ? x.name.slice(0, 14) + '…' : x.name}</text>
+            <rect x={LW} y={y} width={Math.max(x.cs ? 2 : 0, sx(x.cs))} height={BH} rx={3} fill={COST_C} />
+            <text x={LW + sx(x.cs) + 5} y={y + BH - 1} className="ex-val">{x.cs.toFixed(1)}%</text>
+            <rect x={LW} y={y + BH + GAP} width={Math.max(x.ks ? 2 : 0, sx(x.ks))} height={BH} rx={3} fill={CLK_C} />
+            <text x={LW + sx(x.ks) + 5} y={y + 2 * BH + GAP - 1} className="ex-val">{x.ks.toFixed(1)}%</text>
+            <text x={W - 100} y={y + BH + 5} textAnchor="end" className="ex-val">{x.cpc == null ? '-' : `클릭당 ${n0(x.cpc)}원`}</text>
+            <rect x={W - 88} y={y + 1} width={84} height={2 * BH} rx={9} fill={verdict.bg} />
+            <text x={W - 46} y={y + BH + 5} textAnchor="middle" className="ex-q" fill={verdict.c}>{verdict.t}</text>
+          </g>
+        );
+      })}
     </svg>
   );
 }
