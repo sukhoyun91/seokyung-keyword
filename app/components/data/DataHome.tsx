@@ -4,12 +4,14 @@ import { DirectoryPanel, useDirectory } from '../ads/directory';
 import UploadTab from './UploadTab';
 import ViewTab from './ViewTab';
 import ExportTab from './ExportTab';
+import ApiTab from './ApiTab';
 import BuilderHome from '../builder/BuilderHome';
 
 const TABS = [
-  { key: 'upload', label: '① 업로드 (DB 저장)' },
-  { key: 'view', label: '② DB 조회' },
-  { key: 'export', label: '③ 엑셀 다운로드' },
+  { key: 'upload', label: '① 파일 업로드' },
+  { key: 'api', label: '② 네이버 API 가져오기' },
+  { key: 'view', label: '③ DB 조회' },
+  { key: 'export', label: '④ 엑셀 다운로드' },
   { key: 'template', label: '결재 양식 갱신' },
 ] as const;
 type Tab = (typeof TABS)[number]['key'];
@@ -35,7 +37,7 @@ export default function DataHome({ isAdmin, initialTab }: { isAdmin: boolean; in
     <div className="container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
         <h1>원천자료 관리</h1>
-        <span className="hint">네이버 검색광고 다차원 보고서 → DB 저장 · 조회 · 엑셀 다운로드. 검색광고 보고서는 이 DB 자료로 만들어집니다.</span>
+        <span className="hint">파일 업로드 + 네이버 API 가져오기 → DB 누적 → 조회 · 엑셀 다운로드. 검색광고 보고서는 이 DB 자료로 만들어집니다.</span>
       </div>
       <div className="dtabs no-print">
         {TABS.map((t) => (
@@ -51,6 +53,7 @@ export default function DataHome({ isAdmin, initialTab }: { isAdmin: boolean; in
           <DirectoryPanel dir={dir} manage isAdmin={isAdmin} prefillCid={prefillCid} onMsg={flash} />
           <div>
             {tab === 'upload' && <UploadTab dir={dir} isAdmin={isAdmin} onMsg={flash} onUnknownCid={setPrefillCid} />}
+            {tab === 'api' && <ApiTab dir={dir} onMsg={flash} />}
             {tab === 'view' && <ViewTab dir={dir} />}
             {tab === 'export' && <ExportTab dir={dir} />}
           </div>

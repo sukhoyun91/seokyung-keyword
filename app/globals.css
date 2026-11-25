@@ -362,3 +362,8 @@ button.link { background: none; border: 0; padding: 0 4px; color: var(--brand); 
 .rz-ch.tl { left: -5px; top: -5px; cursor: nwse-resize; } .rz-ch.br { right: -5px; bottom: -5px; cursor: nwse-resize; }
 .rz-ch.tr { right: -5px; top: -5px; cursor: nesw-resize; } .rz-ch.bl { left: -5px; bottom: -5px; cursor: nesw-resize; }
 .rz-crop-bar { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px dashed #d4a800; border-radius: 6px; background: #fffbe6; }
+/* API 가져오기 */
+.api-split { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.api-split > div { background: #f7f9fc; border-radius: 8px; padding: 8px 10px; font-size: .88rem; }
+.dir-api input { width: 100%; }
+.msg.warn { background: #fff8e1; color: #7a5b00; }

@@ -17,6 +17,7 @@ export interface Account {
   memo: string;
   active: boolean;
   company_id: number | null;
+  api: 'account' | 'admin' | null; // 네이버 API 키: 계정별 등록 / 관리자 설정 키 / 없음
   coverage: { level: string; month: string; rows: number }[];
   lastUpload: { uploaded_at: string; name: string } | null;
 }
@@ -121,6 +122,7 @@ export function DirectoryPanel({ dir, manage, isAdmin, prefillCid, onMsg }: { di
   const [showCompanyAdd, setShowCompanyAdd] = useState(false);
   const [na, setNa] = useState({ name: '', customer_id: '' });
   const [showAccAdd, setShowAccAdd] = useState(false);
+  const [keyForm, setKeyForm] = useState<{ license: string; secret: string } | null>(null);
 
   useEffect(() => {
     if (prefillCid) {
@@ -185,6 +187,23 @@ export function DirectoryPanel({ dir, manage, isAdmin, prefillCid, onMsg }: { di
     if (!a || !confirm(`${a.name} (${a.customer_id}) 계정과 저장된 자료를 모두 삭제할까요? 되돌릴 수 없습니다.`)) return;
     run(async () => { await api(`/api/ads/accounts/${a.id}`, 'DELETE'); await dir.reload({ companyId: dir.companyId, accountId: null }); }, '삭제했습니다.');
   };
+
+  const saveKey = () =>
+    a && keyForm &&
+    run(async () => {
+      await api(`/api/ads/accounts/${a.id}/api`, 'PUT', keyForm);
+      setKeyForm(null);
+      await dir.reload({ accountId: a.id });
+    }, 'API 키를 암호화해서 저장했습니다. [연결 테스트]로 확인하세요.');
+  const clearKey = () =>
+    a && confirm('이 계정에 등록한 API 키를 지울까요?') &&
+    run(async () => { await api(`/api/ads/accounts/${a.id}/api`, 'PUT', { clear: true }); await dir.reload({ accountId: a.id }); }, '지웠습니다.');
+  const testKey = () =>
+    a &&
+    run(async () => {
+      const j = await api<{ count: number; campaigns: string[] }>(`/api/ads/accounts/${a.id}/api`, 'POST');
+      onMsg(true, `연결 성공: 캠페인 ${j.count}개 (${j.campaigns.slice(0, 5).join(', ')}${j.count > 5 ? ' …' : ''})`);
+    });
 
   const monthsOf = (x: Account) => new Set(x.coverage.map((v) => v.month)).size;
 
@@ -289,6 +308,32 @@ export function DirectoryPanel({ dir, manage, isAdmin, prefillCid, onMsg }: { di
                   {dir.companies.map((co) => <option key={co.id} value={co.id}>{co.name}</option>)}
                 </select>
                 {isAdmin && <button className="danger" onClick={deleteAccount}>삭제</button>}
+              </div>
+              <div className="dir-api">
+                <div className="dir-box-title" style={{ margin: '10px 0 4px' }}>
+                  네이버 API 키{' '}
+                  {a.api === 'account' ? <span className="badge low">계정 키 등록됨</span> : a.api === 'admin' ? <span className="badge ai">관리자 설정 키 사용</span> : <span className="badge">없음</span>}
+                </div>
+                {keyForm ? (
+                  <>
+                    <label>액세스 라이선스</label>
+                    <input type="password" autoComplete="off" value={keyForm.license} onChange={(e) => setKeyForm({ ...keyForm, license: e.target.value })} />
+                    <label>비밀키</label>
+                    <input type="password" autoComplete="off" value={keyForm.secret} onChange={(e) => setKeyForm({ ...keyForm, secret: e.target.value })} />
+                    <div className="hint">계정 번호({a.customer_id})가 네이버 API의 CUSTOMER_ID로 쓰입니다. 검색광고 → 도구 → API 사용 관리에서 이 계정으로 발급한 키를 넣으세요. 암호화해서 저장하며 다시 보여 주지 않습니다.</div>
+                    <div className="btn-row" style={{ marginTop: 6 }}>
+                      <button className="primary" onClick={saveKey} disabled={!keyForm.license.trim() || !keyForm.secret.trim()}>저장</button>
+                      <button onClick={() => setKeyForm(null)}>취소</button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="btn-row">
+                    <button onClick={() => setKeyForm({ license: '', secret: '' })}>{a.api === 'account' ? '키 바꾸기' : '키 등록'}</button>
+                    {a.api && <button onClick={testKey}>연결 테스트</button>}
+                    {a.api === 'account' && <button onClick={clearKey}>키 지우기</button>}
+                  </div>
+                )}
+                {a.api === 'admin' && !keyForm && <div className="hint">관리자 설정의 네이버 고객 ID가 이 계정 번호와 같아 그 키를 씁니다.</div>}
               </div>
             </div>
           )}

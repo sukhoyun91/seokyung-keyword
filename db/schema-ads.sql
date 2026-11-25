@@ -76,3 +76,7 @@ ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES a
 -- 예전에 등록한 광고주는 같은 이름의 관계사로 옮김 (한 번만 실행되는 효과)
 INSERT INTO ad_companies (name) SELECT DISTINCT name FROM ad_accounts WHERE company_id IS NULL ON CONFLICT (name) DO NOTHING;
 UPDATE ad_accounts a SET company_id = c.id FROM ad_companies c WHERE a.company_id IS NULL AND c.name = a.name;
+
+-- 네이버 검색광고 API 키 (계정별, 암호화 저장). 비어 있으면 관리자 설정 키를 고객 ID가 같을 때 사용
+ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS api_license TEXT NOT NULL DEFAULT '';
+ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS api_secret TEXT NOT NULL DEFAULT '';

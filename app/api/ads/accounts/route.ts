@@ -1,15 +1,18 @@
 import { query } from '@/lib/db';
 import { requireUser, errorResponse, HttpError } from '@/lib/auth';
 import { ensureAdsSchema } from '@/lib/ads/schema';
+import { getSettings } from '@/lib/settings';
 
 /** 광고주 목록 + 레벨별 보유 월 */
 export async function GET() {
   try {
     await requireUser();
     await ensureAdsSchema();
-    const accounts = await query<{ id: number; name: string; customer_id: string; memo: string; active: boolean; company_id: number | null }>(
-      'SELECT id, name, customer_id, memo, active, company_id FROM ad_accounts ORDER BY active DESC, name',
+    const accounts = await query<{ id: number; name: string; customer_id: string; memo: string; active: boolean; company_id: number | null; own_key: boolean }>(
+      "SELECT id, name, customer_id, memo, active, company_id, (api_license <> '' AND api_secret <> '') AS own_key FROM ad_accounts ORDER BY active DESC, name",
     );
+    const s = await getSettings();
+    const adminCid = s.naver_access_license && s.naver_secret_key ? s.naver_customer_id?.trim() : '';
     const cover = await query<{ account_id: number; level: string; month: string; rows: number }>(
       `SELECT account_id, level, to_char(month, 'YYYY-MM') AS month, COUNT(*)::int AS rows
          FROM ad_stats GROUP BY account_id, level, month ORDER BY month`,
@@ -20,8 +23,9 @@ export async function GET() {
         ORDER BY u.account_id, u.uploaded_at DESC`,
     );
     return Response.json({
-      accounts: accounts.map((a) => ({
+      accounts: accounts.map(({ own_key, ...a }) => ({
         ...a,
+        api: own_key ? 'account' : adminCid && adminCid === a.customer_id ? 'admin' : null,
         coverage: cover.filter((c) => c.account_id === a.id).map(({ level, month, rows }) => ({ level, month, rows })),
         lastUpload: lastUploads.find((l) => l.account_id === a.id) ?? null,
       })),
