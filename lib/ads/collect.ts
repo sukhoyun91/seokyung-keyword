@@ -63,8 +63,8 @@ export async function collectMonth(creds: AdsCreds, month: string): Promise<Coll
   }
 
   const ids = [...campaigns.map((c) => c.nccCampaignId), ...adgroups.map((g) => g.nccAdgroupId), ...keywords.map((k) => k.id)];
-  const stats = await statsFor(creds, ids, range.since, range.until);
-  calls += Math.ceil(ids.length / 50);
+  const { stats, calls: statCalls } = await statsFor(creds, ids, range.since, range.until);
+  calls += statCalls;
   const st = (id: string): Stat => stats.get(id) ?? { id };
   const has = (s: Stat) => num(s.impCnt) > 0 || num(s.clkCnt) > 0 || num(s.salesAmt) > 0;
   const rank = (s: Stat) => (num(s.avgRnk) > 0 ? Math.round(num(s.avgRnk) * 100) / 100 : null);

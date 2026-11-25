@@ -10,6 +10,17 @@ GitHub 웹 업로드 시에는 각 버전의 **변경 파일**만 올리면 됩�
 
 ---
 
+## v1.9.2 — 2026-11-25
+- 네이버 API 가져오기 오류 수정: "모든 ID는 동일한 타입이어야 합니다" (/stats 400) — 캠페인·광고그룹·키워드 ID를 종류별로 나눠 요청
+
+변경 파일: `lib/ads/naverAds.ts`, `lib/ads/collect.ts`, `package.json`, `CHANGELOG.md`
+
+## v1.9.1 — 2026-11-25
+- 네이버 API 인증 실패 안내 개선: 네이버 응답 원문(키는 가림)을 함께 보여 주고, 원인(비밀키 불일치 / 계정 권한 없음)별로 안내
+- API 키 저장 시 액세스 라이선스·비밀키가 서로 바뀌어 들어가면 자동으로 바로잡음, 공백 제거, 모양이 이상하면 경고
+
+변경 파일: `lib/ads/naverAds.ts`, `app/api/ads/accounts/[id]/api/route.ts`, `app/components/ads/directory.tsx`, `package.json`, `CHANGELOG.md`
+
 ## v1.9.0 — 2026-11-25
 **원천자료 관리: 파일 업로드 + 네이버 API 하이브리드**
 - 새 탭 '② 네이버 API 가져오기': 관리 API(/ncc/campaigns·adgroups·keywords) + 통계 API(/stats)로 계정·캠페인·광고그룹·키워드 월 자료 수집 → DB 누적
