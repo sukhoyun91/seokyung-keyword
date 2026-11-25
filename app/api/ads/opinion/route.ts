@@ -45,19 +45,35 @@ ${STYLE}
 [이번 달 데이터]
 ${summarizeForAI(report)}`;
 
-    const client = new Anthropic({ apiKey: s.anthropic_api_key });
-    let msg;
-    try {
-      msg = await client.messages.create({
-        model: s.claude_model || 'claude-haiku-5-5',
-        max_tokens: 2000,
+    const client = new Anthropic({ apiKey: s.anthropic_api_key, timeout: 55_000, maxRetries: 0 });
+    const model = s.claude_model || 'claude-haiku-5-5';
+    const call = (noThinking: boolean) =>
+      client.messages.create({
+        model,
+        max_tokens: 4000,
+        ...(noThinking ? { thinking: { type: 'disabled' as const } } : {}),
         messages: [{ role: 'user', content: prompt }],
       });
+    let msg;
+    try {
+      try {
+        msg = await call(true);
+      } catch (e: any) {
+        // 모델이 thinking 설정을 받지 않으면 설정 없이 다시 시도
+        if (e?.status === 400 && /thinking/i.test(String(e?.message))) msg = await call(false);
+        else throw e;
+      }
     } catch (e: any) {
-      if (e?.status === 401) throw new HttpError(400, 'Claude API 키가 올바르지 않습니다.');
+      if (e?.status === 401) throw new HttpError(400, 'Claude API 키가 올바르지 않습니다. 관리자 설정을 확인하세요.');
+      if (e?.status === 404) throw new HttpError(400, `Claude 모델 이름(${model})을 찾을 수 없습니다. 관리자 설정의 모델을 확인하세요.`);
+      if (e?.status === 429 || e?.status === 529) throw new HttpError(503, 'Claude API가 혼잡합니다. 잠시 후 다시 눌러 주세요.');
+      if (e?.name === 'APIConnectionTimeoutError') throw new HttpError(504, 'Claude 응답이 늦어 시간이 초과됐습니다. 다시 눌러 주세요.');
       throw new HttpError(502, `Claude API 오류: ${e?.message ?? e}`);
     }
-    const text = msg.content.map((b) => (b.type === 'text' ? b.text : '')).join('').trim();
+    const text = msg.content.map((b: any) => (b.type === 'text' ? b.text : '')).join('').trim();
+    if (!text) {
+      throw new HttpError(502, `AI가 빈 답을 보냈습니다 (모델 ${model}, 종료 사유 ${msg.stop_reason}). 다시 눌러 주시고, 계속되면 관리자 설정에서 모델을 바꿔 보세요.`);
+    }
     return Response.json({ opinion: text });
   } catch (e) {
     return errorResponse(e);

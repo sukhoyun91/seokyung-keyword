@@ -47,6 +47,8 @@ export default function AdReportView({ accountId, month, userName }: { accountId
   const [opinion, setOpinion] = useState('');
   const [opDirty, setOpDirty] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState('');
+  const [htmlBusy, setHtmlBusy] = useState(false);
   const [inputs, setInputs] = useState({ tax_invoice: '', coupon: '', note: '' });
   const [groupSet, setGroupSet] = useState<Record<string, { daily_budget: string; region_target: string }>>({});
   const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(null);
@@ -89,13 +91,58 @@ export default function AdReportView({ accountId, month, userName }: { accountId
     setAiBusy(true);
     try {
       const j = await api<{ opinion: string }>('/api/ads/opinion', 'POST', { accountId, month });
+      if (!j.opinion?.trim()) throw new Error('AI 초안이 비어 있습니다. 다시 눌러 주세요.');
+      setAiErr('');
       setOpinion(j.opinion);
       setOpDirty(true);
       notify(true, 'AI 초안을 만들었습니다. 내용을 확인·수정한 뒤 [의견 저장]을 누르세요.');
     } catch (e: any) {
-      notify(false, e.message);
+      const m = /Unexpected|JSON|\(50[24]\)/.test(e.message) ? 'AI 응답 시간이 초과됐습니다. 다시 눌러 주세요.' : e.message;
+      setAiErr(m);
+      notify(false, m);
     } finally {
       setAiBusy(false);
+    }
+  }
+
+  /** 지금 화면의 보고서를 한 파일짜리 HTML로 저장 (스타일 포함, 편집 도구 제외) */
+  function downloadHtml() {
+    const src = document.querySelector('.container.report');
+    if (!src || !r) return;
+    setHtmlBusy(true);
+    try {
+      const node = src.cloneNode(true) as HTMLElement;
+      node.querySelectorAll('.no-print, .ex-tip, script').forEach((el) => el.remove());
+      node.querySelectorAll('.print-only').forEach((el) => el.classList.remove('print-only'));
+      node.querySelectorAll('[style*="position: sticky"]').forEach((el) => el.remove());
+      let css = '';
+      for (const sh of Array.from(document.styleSheets)) {
+        try { css += Array.from(sh.cssRules).map((x) => x.cssText).join('\n') + '\n'; } catch { /* 외부 시트 무시 */ }
+      }
+      const title = `${r.account.name} 네이버 검색광고 ${monthLabel(month)} 결과 보고`;
+      const html = `<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title.replace(/</g, '&lt;')}</title>
+<style>${css}
+body { background: #f4f6f9; }
+.container.report { max-width: 1180px; margin: 0 auto; padding: 20px 16px 40px; }
+.opinion-print { white-space: pre-wrap; line-height: 1.7; }
+.html-foot { color: #8a93a3; font-size: .75rem; text-align: center; margin-top: 18px; }
+</style></head><body>
+${node.outerHTML}
+<div class="html-foot">${r.account.company ?? ''} · ${new Date().toLocaleString('ko-KR')} 저장 · 서경방송 마케팅 도구</div>
+</body></html>`;
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `검색광고보고서_${r.account.name}_${month}.html`.replace(/[\\/:*?"<>|\s]+/g, '_');
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      if (opDirty) notify(true, 'HTML로 저장했습니다. (담당자 의견은 아직 저장 전 내용이 들어갔습니다)');
+    } finally {
+      setHtmlBusy(false);
     }
   }
 
@@ -179,6 +226,7 @@ export default function AdReportView({ accountId, month, userName }: { accountId
           <option value="all">추이: 전체 기간</option>
         </select>
         <span className="spacer" />
+        <button onClick={downloadHtml} disabled={htmlBusy}>HTML 다운로드</button>
         <button className="accent" onClick={() => window.print()}>인쇄 / PDF 저장</button>
       </div>
       {flash && <div className={`msg ${flash.ok ? 'ok' : 'err'} no-print`} style={{ position: 'sticky', top: 68, zIndex: 5 }}>{flash.text}</div>}
@@ -268,6 +316,7 @@ export default function AdReportView({ accountId, month, userName }: { accountId
             {opDirty && <span className="hint" style={{ color: 'var(--warn)' }}>저장되지 않은 변경 사항이 있습니다.</span>}
             {!opDirty && r.notes.updated_at && r.notes.opinion && <span className="hint">저장됨 · {r.notes.opinion_by} {new Date(r.notes.updated_at).toLocaleString('ko-KR')}</span>}
           </div>
+          {aiErr && <div className="msg err" style={{ marginTop: 8 }}>AI 초안 실패: {aiErr}</div>}
           <p className="hint">AI 초안은 숫자를 데이터에서만 가져오도록 했지만, 저장 전 반드시 확인하세요.</p>
         </div>
         <div className="print-only opinion-print">{opinion || '(작성된 의견 없음)'}</div>
