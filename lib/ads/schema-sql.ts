@@ -79,4 +79,9 @@ UPDATE ad_accounts a SET company_id = c.id FROM ad_companies c WHERE a.company_i
 -- 네이버 검색광고 API 키 (계정별, 암호화 저장). 비어 있으면 관리자 설정 키를 고객 ID가 같을 때 사용
 ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS api_license TEXT NOT NULL DEFAULT '';
 ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS api_secret TEXT NOT NULL DEFAULT '';
+-- 캠페인유형 열이 없는 파일로 올린 달: 같은 광고주·같은 캠페인의 다른 달 유형으로 채움 (v1.11.3)
+UPDATE ad_stats s SET campaign_type = m.type
+  FROM (SELECT DISTINCT ON (account_id, campaign) account_id, campaign, campaign_type AS type FROM ad_stats
+         WHERE level = 'campaign' AND campaign_type <> '' AND campaign <> '' ORDER BY account_id, campaign, month DESC) m
+ WHERE s.level = 'campaign' AND s.campaign_type = '' AND s.account_id = m.account_id AND s.campaign = m.campaign;
 `;

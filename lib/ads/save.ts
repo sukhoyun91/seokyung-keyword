@@ -43,6 +43,7 @@ export function saveQueries(
       ],
     });
   }
+  if (level === 'campaign') queries.push(fillCampaignTypes(accountId));
   if (log) {
     queries.push({
       text: 'INSERT INTO ad_uploads (account_id, level, months, file_name, row_count, uploaded_by) VALUES ($1, $2, $3, $4, $5, $6)',
@@ -50,4 +51,20 @@ export function saveQueries(
     });
   }
   return queries;
+}
+
+/**
+ * 캠페인유형 열이 없는 파일(보고서 설정에 따라 빠짐)로 올린 달은 유형이 비어 있어
+ * 보고서에서 캠페인 이름(예: "1. 서경방송")이 유형처럼 따로 표시됨.
+ * 같은 광고주의 다른 달에 같은 캠페인의 유형이 있으면 그것으로 채움 (양방향: 새로 올린 달·예전 달 모두)
+ */
+export function fillCampaignTypes(accountId: number) {
+  return {
+    text: `UPDATE ad_stats s SET campaign_type = m.type
+             FROM (SELECT DISTINCT ON (campaign) campaign, campaign_type AS type FROM ad_stats
+                    WHERE account_id = $1 AND level = 'campaign' AND campaign_type <> '' AND campaign <> ''
+                    ORDER BY campaign, month DESC) m
+            WHERE s.account_id = $1 AND s.level = 'campaign' AND s.campaign_type = '' AND s.campaign = m.campaign`,
+    params: [accountId] as unknown[],
+  };
 }

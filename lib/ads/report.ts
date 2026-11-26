@@ -29,7 +29,18 @@ export async function buildReport(accountId: number, month: string): Promise<AdR
   const [lvRows, coverRows, campRows, campTypeMap, grpRows, mediaRows, kwRows, stTypeRows, stTopRows, stRiserRows, noteRows, settingRows] = await Promise.all([
     query(`SELECT ${MON}, level, ${AGG} FROM ad_stats WHERE account_id = $1 AND month <= $2 AND level IN ('account','campaign') GROUP BY month, level ORDER BY month`, P),
     query<{ level: string }>(`SELECT DISTINCT level FROM ad_stats WHERE account_id = $1 AND month = $2`, P),
-    query(`SELECT ${MON}, COALESCE(NULLIF(campaign_type,''), campaign) AS type, ${AGG} FROM ad_stats WHERE account_id = $1 AND month <= $2 AND level = 'campaign' GROUP BY month, 2 ORDER BY month`, P),
+    // 캠페인유형이 빈 달(유형 열이 없는 파일로 올린 달)은 같은 캠페인의 다른 달 유형 → 이름으로 추정 → 캠페인 이름 순으로 채움
+    query(
+      `WITH m AS (SELECT DISTINCT ON (campaign) campaign, campaign_type AS type FROM ad_stats
+                   WHERE account_id = $1 AND level = 'campaign' AND campaign_type <> '' AND campaign <> '' ORDER BY campaign, month DESC)
+       SELECT ${MON}, COALESCE(NULLIF(s.campaign_type,''), m.type,
+                CASE WHEN s.campaign ~* '브랜드|brand' THEN '브랜드검색' WHEN s.campaign ~* '플레이스|place' THEN '플레이스'
+                     WHEN s.campaign ~* '쇼핑' THEN '쇼핑검색' WHEN s.campaign ~* '파워컨텐츠|파워콘텐츠' THEN '파워컨텐츠' END,
+                s.campaign) AS type, ${AGG}
+         FROM ad_stats s LEFT JOIN m ON m.campaign = s.campaign
+        WHERE s.account_id = $1 AND s.month <= $2 AND s.level = 'campaign' GROUP BY s.month, 2 ORDER BY s.month`,
+      P,
+    ),
     query<{ campaign: string; type: string }>(`SELECT DISTINCT ON (campaign) campaign, campaign_type AS type FROM ad_stats WHERE account_id = $1 AND level = 'campaign' AND campaign_type <> '' AND campaign <> '' ORDER BY campaign, month DESC`, [accountId]),
     query(`SELECT ${MON}, campaign, ad_group, ${AGG} FROM ad_stats WHERE account_id = $1 AND month <= $2 AND level = 'adgroup' GROUP BY month, campaign, ad_group ORDER BY month`, P),
     query(`SELECT ${MON}, ad_group, dim AS media, ${AGG} FROM ad_stats WHERE account_id = $1 AND month <= $2 AND level = 'media' GROUP BY month, ad_group, dim ORDER BY month`, P),

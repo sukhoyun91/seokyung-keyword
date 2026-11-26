@@ -24,6 +24,8 @@ function explain(err: any, ctx = ''): IgError {
   if (code === 190) m = '인스타그램 토큰이 만료됐거나 올바르지 않습니다. 관리자 설정에서 새 토큰을 넣어 주세요.';
   else if (code === 10 || code === 200) m = `토큰에 필요한 권한이 없습니다 (instagram_basic, pages_show_list, business_management 등). Meta에서 토큰을 다시 발급하세요. (${raw})`;
   else if (code === 4 || code === 17 || code === 32 || code === 613) m = '인스타그램 API 호출 한도를 넘었습니다. 1시간쯤 뒤에 다시 시도하세요.';
+  else if (code === 100 && /Object with ID '([^']*)'/.test(raw) && !/business_discovery/i.test(raw))
+    m = `서경방송 인스타그램 계정 ID('${/Object with ID '([^']*)'/.exec(raw)![1]}')가 올바르지 않습니다. 관리자 설정의 계정 ID 칸을 비우고 연결 테스트를 누르면 숫자 ID를 자동으로 찾아 넣습니다.`;
   else if (code === 110 || code === 100) m = ctx ? `@${ctx} 계정을 찾을 수 없거나 비즈니스·크리에이터 계정이 아닙니다. (${raw})` : `요청 값이 올바르지 않습니다: ${raw}`;
   return new IgError(m, code, sub);
 }
@@ -73,12 +75,20 @@ export async function inspectToken(token: string) {
   return { me: { id: String(me.id), name: String(me.name ?? '') }, expiresAt, accounts };
 }
 
+/** 숫자 ID인지 (이메일·아이디를 잘못 넣은 경우 걸러냄) */
+export const isIgId = (v: string) => /^\d{6,25}$/.test(v.trim());
+
+/** 7일 안에 만료되는 토큰 */
+export const expiresSoon = (ms: number | null) => ms != null && ms > 0 && ms - Date.now() < 7 * 86400000;
+
 export const expiryText = (ms: number | null) => {
   if (ms == null) return '만료일 확인 불가';
   if (ms === 0) return '만료 없음';
-  const days = Math.floor((ms - Date.now()) / 86400000);
-  const d = new Date(ms + 9 * 3600_000).toISOString().slice(0, 10);
-  return days < 0 ? `${d} 만료됨` : `${d} 만료 (${days}일 남음)`;
+  const left = ms - Date.now();
+  const d = new Date(ms + 9 * 3600_000).toISOString().slice(0, 16).replace('T', ' ');
+  if (left <= 0) return `${d} 만료됨`;
+  if (left < 86400000) return `${d} 만료 (${Math.max(1, Math.round(left / 3600000))}시간 남음)`;
+  return `${d.slice(0, 10)} 만료 (${Math.floor(left / 86400000)}일 남음)`;
 };
 
 /** 설정 "지역:인스타그램아이디" 줄 → 선택한 지역에 해당하는 계정 */
