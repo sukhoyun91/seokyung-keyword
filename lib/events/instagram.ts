@@ -9,6 +9,14 @@ import { findSido, shortRegion } from './regions';
  */
 const BASE = process.env.IG_GRAPH_BASE || 'https://graph.facebook.com/v25.0';
 
+/**
+ * Business Discovery 에 필요한 권한 (Meta 문서 기준)
+ * - instagram_basic, instagram_manage_insights, pages_read_engagement
+ * - 페이지 권한을 비즈니스 관리자(시스템 사용자 포함)로 받은 경우 ads_read 또는 ads_management
+ * - 페이지·계정 찾기용 pages_show_list, business_management
+ */
+export const IG_PERMS = ['instagram_basic', 'instagram_manage_insights', 'pages_read_engagement', 'pages_show_list', 'business_management', 'ads_read'];
+
 export class IgError extends Error {
   constructor(message: string, public code?: number, public sub?: number) {
     super(message);
@@ -22,7 +30,7 @@ function explain(err: any, ctx = ''): IgError {
   const raw = String(err?.error_user_msg || err?.message || '알 수 없는 오류');
   let m = raw;
   if (code === 190) m = '인스타그램 토큰이 만료됐거나 올바르지 않습니다. 관리자 설정에서 새 토큰을 넣어 주세요.';
-  else if (code === 10 || code === 200) m = `토큰에 필요한 권한이 없습니다 (instagram_basic, pages_show_list, business_management 등). Meta에서 토큰을 다시 발급하세요. (${raw})`;
+  else if (code === 10 || code === 200) m = `토큰에 필요한 권한이 없습니다. 다른 계정 게시물 읽기(Business Discovery)에는 ${IG_PERMS.join(', ')} 권한이 모두 필요합니다. 관리자 연결 테스트의 "빠진 권한"을 확인하고 토큰을 다시 만드세요. (${raw})`;
   else if (code === 4 || code === 17 || code === 32 || code === 613) m = '인스타그램 API 호출 한도를 넘었습니다. 1시간쯤 뒤에 다시 시도하세요.';
   else if (code === 100 && /Object with ID '([^']*)'/.test(raw) && !/business_discovery/i.test(raw))
     m = `서경방송 인스타그램 계정 ID('${/Object with ID '([^']*)'/.exec(raw)![1]}')가 올바르지 않습니다. 관리자 설정의 계정 ID 칸을 비우고 연결 테스트를 누르면 숫자 ID를 자동으로 찾아 넣습니다.`;
@@ -72,7 +80,17 @@ export async function inspectToken(token: string) {
   } catch {
     /* 페이지 목록 권한이 없으면 건너뜀 */
   }
-  return { me: { id: String(me.id), name: String(me.name ?? '') }, expiresAt, accounts };
+  // 받은 권한 확인
+  let granted: string[] | null = null;
+  try {
+    const p = await igGet('me/permissions', {}, token);
+    granted = (p?.data ?? []).filter((x: any) => x?.status === 'granted').map((x: any) => String(x.permission));
+  } catch {
+    /* 권한 목록을 못 읽으면 건너뜀 */
+  }
+  const missing = granted ? IG_PERMS.filter((x) => !granted!.includes(x) && !(x === 'ads_read' && granted!.includes('ads_management'))) : null;
+  const systemUser = /system user/i.test(String(me.name ?? ''));
+  return { me: { id: String(me.id), name: String(me.name ?? '') }, expiresAt: expiresAt ?? (systemUser ? 0 : null), accounts, granted, missing, systemUser };
 }
 
 /** 숫자 ID인지 (이메일·아이디를 잘못 넣은 경우 걸러냄) */

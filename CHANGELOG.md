@@ -10,6 +10,24 @@ GitHub 웹 업로드 시에는 각 버전의 **변경 파일**만 올리면 됩�
 
 ---
 
+## v1.12.4 — 2026-11-26 · 인스타그램 권한 진단
+
+**오류 수정 · 개선**
+- 다른 계정 게시물 읽기(Business Discovery)에 필요한 권한 안내를 Meta 문서 기준으로 바로잡음
+  - 필요: instagram_basic, instagram_manage_insights, pages_read_engagement, pages_show_list, business_management, ads_read(시스템 사용자 등 비즈니스 관리자로 페이지 권한을 받은 경우)
+- 연결 테스트가 토큰이 실제로 받은 권한을 확인해 **빠진 권한**을 이름으로 보여 줌
+- 시스템 사용자 토큰은 "만료 없음"으로 표시 (이전: 만료일 확인 불가)
+- 안내서 2-A·2-B 권한 목록, 오류 표 갱신
+
+**변경 파일**
+- `package.json`
+- `CHANGELOG.md`
+- `docs/인스타그램-연결-안내.md`
+- `lib/events/instagram.ts`
+- `app/api/admin/test/route.ts`
+
+---
+
 ## v1.12.3 — 2026-11-26 · 매체 현황 표 당월만
 
 **변경**
