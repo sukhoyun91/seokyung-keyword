@@ -5,7 +5,7 @@ import { fetchKeywordStats } from '@/lib/naver';
 import { findRank, parseAreas, EXPOSURE_AREAS, normalizeTarget } from '@/lib/exposure';
 import { collectTour, tourDiagText, collectStd, stdDiagText, collectGov, govDiagText, domainsFor } from '@/lib/events/sources';
 import { fetchSite } from '@/lib/site';
-import { inspectToken, expiryText, igAccountsFor, collectInstagram } from '@/lib/events/instagram';
+import { inspectToken, expiryText, expiresSoon, isIgId, igAccountsFor, collectInstagram } from '@/lib/events/instagram';
 import { saveSetting } from '@/lib/settings';
 
 export const runtime = 'nodejs';
@@ -21,16 +21,23 @@ export async function POST(req: Request) {
       try {
         const info = await inspectToken(s.ig_access_token);
         const lines = [`토큰 확인: ${info.me.name || info.me.id} · ${expiryText(info.expiresAt)}`];
+        if (expiresSoon(info.expiresAt))
+          lines.push('⚠ 곧 만료되는 단기 토큰입니다. 안내서 2-A(만료 없는 시스템 사용자 토큰)로 새로 만들거나, 액세스 토큰 디버거에서 "액세스 토큰 연장"을 눌러 받은 약 60일짜리 토큰으로 바꿔 저장하세요.');
         let igId = s.ig_user_id.trim();
+        if (igId && !isIgId(igId)) {
+          lines.push(`계정 ID 칸의 '${igId}'는 숫자 ID가 아니라서(이메일·아이디는 쓸 수 없음) 비우고 다시 찾습니다.`);
+          igId = '';
+          await saveSetting('ig_user_id', '', me.id);
+        }
         if (!igId) {
           if (info.accounts.length === 1) {
             igId = info.accounts[0].id;
             await saveSetting('ig_user_id', igId, me.id);
             lines.push(`서경방송 인스타그램 계정을 찾아 저장했습니다: @${info.accounts[0].username} (ID ${igId}, 페이지 "${info.accounts[0].page}")`);
           } else if (info.accounts.length > 1) {
-            return Response.json({ ok: false, message: `${lines[0]}\n연결된 인스타그램 계정이 여러 개입니다. 아래 중 서경방송 계정의 ID를 "계정 ID" 칸에 넣고 저장하세요:\n${info.accounts.map((a) => `@${a.username} → ${a.id} (페이지 "${a.page}")`).join('\n')}` });
+            return Response.json({ ok: false, message: `${lines.join('\n')}\n연결된 인스타그램 계정이 여러 개입니다. 아래 중 서경방송 계정의 ID를 "계정 ID" 칸에 넣고 저장하세요:\n${info.accounts.map((a) => `@${a.username} → ${a.id} (페이지 "${a.page}")`).join('\n')}` });
           } else {
-            return Response.json({ ok: false, message: `${lines[0]}\n이 토큰으로 볼 수 있는 페이스북 페이지에 연결된 인스타그램 비즈니스 계정이 없습니다. 토큰 발급 때 서경방송 페이지와 instagram_basic·pages_show_list·business_management 권한을 선택했는지 확인하세요.` });
+            return Response.json({ ok: false, message: `${lines.join('\n')}\n이 토큰으로 볼 수 있는 페이스북 페이지에 연결된 인스타그램 비즈니스 계정이 없습니다. 토큰 발급 때 서경방송 페이지와 instagram_basic·pages_show_list·business_management 권한을 선택했는지 확인하세요.` });
           }
         }
         const accounts = igAccountsFor(s.ig_accounts, s.event_default_regions.split(',').map((x) => x.trim()).filter(Boolean), s.event_default_sido);
@@ -47,7 +54,7 @@ export async function POST(req: Request) {
         if (a?.error) return Response.json({ ok: false, message: `${lines.join('\n')}\n@${first.username} 읽기 실패: ${a.error}` });
         lines.push(`@${first.username} 읽기 성공 — 최근 게시물 ${a.read}개 중 최근 3개월 ${a.inWindow}개, 행사 관련 ${a.kept}개`);
         if (out.sources[0]) lines.push(`예: ${out.sources[0].date} "${out.sources[0].title}"`);
-        return Response.json({ ok: true, message: lines.join('\n') });
+        return Response.json({ ok: !expiresSoon(info.expiresAt), message: lines.join('\n') });
       } catch (e: any) {
         return Response.json({ ok: false, message: `연결 실패: ${e?.message ?? e}` });
       }

@@ -3,7 +3,7 @@ import { getSettings } from '@/lib/settings';
 import { loadReport, saveFields } from '@/lib/events/store';
 import { collectTour, collectStd, collectNews, collectGov, domainsFor, tourDiagText, stdDiagText, govDiagText } from '@/lib/events/sources';
 import { fetchSite } from '@/lib/site';
-import { collectInstagram, igAccountsFor, igDiagText } from '@/lib/events/instagram';
+import { collectInstagram, igAccountsFor, igDiagText, isIgId } from '@/lib/events/instagram';
 import { summarizeEvents } from '@/lib/events/summarize';
 import type { EvSource, StepKey } from '@/lib/events/types';
 
@@ -92,6 +92,7 @@ export async function POST(req: Request, { params }: Ctx) {
       await saveFields(id, { sources, steps: { ...steps, gov: { status: 'done', count, message, debug: diag, at: new Date().toISOString() } } });
     } else if (step === 'sns') {
       if (!s.ig_access_token || !s.ig_user_id) throw new HttpError(400, '인스타그램 토큰·계정 ID가 설정되지 않았습니다. 관리자 설정에서 입력하거나 이 출처를 끄세요.');
+      if (!isIgId(s.ig_user_id)) throw new HttpError(400, `서경방송 인스타그램 계정 ID('${s.ig_user_id}')가 숫자 ID가 아닙니다. 관리자 설정에서 계정 ID 칸을 비우고 연결 테스트를 누르세요.`);
       const accounts = igAccountsFor(s.ig_accounts, r.regions, r.options?.sido);
       let found: Omit<EvSource, 'id'>[] = [];
       if (!accounts.length) message = '선택한 지역에 등록된 인스타그램 계정이 없습니다 (관리자 설정 → 수집할 지자체 인스타그램).';

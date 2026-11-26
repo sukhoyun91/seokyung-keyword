@@ -85,3 +85,21 @@ UPDATE ad_stats s SET campaign_type = m.type
   FROM (SELECT DISTINCT ON (account_id, campaign) account_id, campaign, campaign_type AS type FROM ad_stats
          WHERE level = 'campaign' AND campaign_type <> '' AND campaign <> '' ORDER BY account_id, campaign, month DESC) m
  WHERE s.level = 'campaign' AND s.campaign_type = '' AND s.account_id = m.account_id AND s.campaign = m.campaign;
+-- 보고서 화면 배치 (광고주별, v1.12.0)
+CREATE TABLE IF NOT EXISTS ad_report_layouts (
+  account_id  INTEGER PRIMARY KEY REFERENCES ad_accounts(id) ON DELETE CASCADE,
+  layout      JSONB        NOT NULL DEFAULT '{}'::jsonb,
+  updated_by  INTEGER,
+  updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+-- 보고서 표의 비고 (캠페인 유형별 월 행, 광고그룹별 행) (v1.12.0)
+CREATE TABLE IF NOT EXISTS ad_row_notes (
+  account_id  INTEGER      NOT NULL REFERENCES ad_accounts(id) ON DELETE CASCADE,
+  scope       VARCHAR(20)  NOT NULL,
+  row_key     VARCHAR(300) NOT NULL,
+  month       VARCHAR(7)   NOT NULL,
+  note        TEXT         NOT NULL DEFAULT '',
+  updated_by  INTEGER,
+  updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (account_id, scope, row_key, month)
+);

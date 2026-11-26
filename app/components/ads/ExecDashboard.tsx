@@ -2,6 +2,7 @@
 import { useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { ctr, cpc, monthLabel, type AdReport, type M } from '@/lib/ads/types';
 import { n0, p2 } from './fmt';
+import { Blk, Flow } from './Layout';
 
 /** 임원 보고용 한눈에 보기 — 외부 라이브러리 없이 SVG.
  *  색: 당월 = 브랜드 파랑, 전월 = 회색, 증가 ▲빨강 / 감소 ▼파랑 (보고서 공통 규칙), 유형 = 고정 순서 범주색 */
@@ -72,27 +73,35 @@ export default function ExecDashboard({ r, month, shown }: { r: AdReport; month:
     .sort((a, b) => b.d - a.d);
 
   // ── 5) 광고비 비중 vs 클릭 비중 (당월)
+  // 광고비 0원 그룹(브랜드검색 등 정액 상품)은 비중 비교에서 빼고 따로 표시
   const share = (() => {
-    const list = r.adGroups.groups
+    const all = r.adGroups.groups
       .map((g) => ({ name: g.ad_group, m: gs(g.ad_group, month) }))
       .filter((x) => x.m && (x.m.cost > 0 || x.m.clk > 0))
-      .map((x) => ({ name: x.name, cost: x.m!.cost, clk: x.m!.clk }))
-      .sort((a, b) => b.cost - a.cost);
+      .map((x) => ({ name: x.name, cost: x.m!.cost, clk: x.m!.clk }));
+    const free = all.filter((x) => x.cost === 0).sort((a, b) => b.clk - a.clk);
+    const list = all.filter((x) => x.cost > 0).sort((a, b) => b.cost - a.cost);
     const tc = list.reduce((a, b) => a + b.cost, 0) || 1;
     const tk = list.reduce((a, b) => a + b.clk, 0) || 1;
     const TOP = 10;
     const head = list.slice(0, TOP);
     const rest = list.slice(TOP);
     if (rest.length) head.push({ name: `기타 ${rest.length}개 그룹`, cost: rest.reduce((a, b) => a + b.cost, 0), clk: rest.reduce((a, b) => a + b.clk, 0) });
-    return head.map((x) => ({ ...x, cs: (x.cost / tc) * 100, ks: (x.clk / tk) * 100, cpc: x.clk ? x.cost / x.clk : null }));
+    return {
+      rows: head.map((x) => ({ ...x, cs: (x.cost / tc) * 100, ks: (x.clk / tk) * 100, cpc: x.clk ? x.cost / x.clk : null })),
+      free,
+      avgCpc: list.reduce((a, b) => a + b.clk, 0) ? tc / tk : 0,
+    };
   })();
 
   return (
     <section className="rp-sec exec" ref={box} onMouseLeave={hide}>
       <h2><span className="no">★</span>한눈에 보는 {Number(month.slice(5))}월 성과 <span className="hint">{monthLabel(month)} vs 전월 {monthLabel(r.prevMonth)}</span></h2>
-      <div className="ex-headline">{headline}</div>
+      <Flow>
+      <Blk id="exec.headline" label="핵심 메시지"><div className="ex-headline">{headline}</div></Blk>
 
-      <div className="ex-tiles">
+      <Blk id="exec.tiles" label="핵심 지표 카드">
+      <Flow gap={10} className="ex-tiles-flow">
         {tiles.map((t) => {
           const c = t.get(cur);
           const p = prev ? t.get(prev) : undefined;
@@ -100,7 +109,8 @@ export default function ExecDashboard({ r, month, shown }: { r: AdReport; month:
           const rel = p ? pct(c, p) ?? 0 : 0;
           const good: boolean | 'flat' | null = d == null || t.neutral ? null : Math.abs(rel) < 1 ? 'flat' : (d > 0) !== Boolean(t.invert);
           return (
-            <div key={t.label} className="ex-tile">
+            <Blk key={t.label} id={`exec.tile.${t.label}`} label={t.label} w={20}>
+            <div className="ex-tile">
               <div className="ex-tl">{t.label}</div>
               <div className="ex-tv">{t.fmt(c)}<small>{t.unit}</small></div>
               <div className="ex-td">
@@ -116,49 +126,70 @@ export default function ExecDashboard({ r, month, shown }: { r: AdReport; month:
               </div>
               <Spark data={series.map((m) => ({ month: m.month, v: t.get(m) }))} cur={month} fmt={(v) => `${t.fmt(v)}${t.unit}`} show={show} hide={hide} />
             </div>
+            </Blk>
           );
         })}
-      </div>
+      </Flow>
+      </Blk>
 
       {types.length > 0 && (
+        <Blk id="exec.compare" label="캠페인 유형별 전월 vs 당월">
         <div className="ex-block">
           <h3>캠페인 유형별 전월 vs 당월</h3>
           <div className="ex-legend"><span><i style={{ background: PREV }} />전월</span><span><i style={{ background: CUR }} />당월</span></div>
-          <div className="ex-multi">
+          <Flow gap={16}>
             {([
               ['노출수', (m?: M) => m?.imp ?? 0, '회'],
               ['클릭수', (m?: M) => m?.clk ?? 0, '건'],
               ['광고비', (m?: M) => m?.cost ?? 0, '원'],
             ] as const).map(([label, get, unit]) => (
-              <PairBars key={label} title={label} unit={unit} rows={types.map((t) => ({ name: t, p: get(cs(t, r.prevMonth)), c: get(cs(t, month)) }))} hasPrev={Boolean(prev)} show={show} hide={hide} />
+              <Blk key={label} id={`exec.compare.${label}`} label={`유형별 ${label}`} w={33}>
+              <PairBars title={label} unit={unit} rows={types.map((t) => ({ name: t, p: get(cs(t, r.prevMonth)), c: get(cs(t, month)) }))} hasPrev={Boolean(prev)} show={show} hide={hide} />
+              </Blk>
             ))}
-          </div>
+          </Flow>
         </div>
+        </Blk>
       )}
 
-      <div className="ex-grid2">
         {types.length > 0 && (
+          <Blk id="exec.mix" label="광고비 구성비" w={50}>
           <div className="ex-block">
             <h3>광고비 구성비 (캠페인 유형)</h3>
             <Mix rows={[...(prev ? [{ label: '전월', month: r.prevMonth }] : []), { label: '당월', month }].map((x) => ({ label: x.label, parts: types.map((t) => ({ name: t, v: cs(t, x.month)?.cost ?? 0 })) }))} colorOf={colorOf} show={show} hide={hide} />
             <div className="ex-legend">{types.map((t) => <span key={t}><i style={{ background: colorOf.get(t) }} />{t}</span>)}</div>
           </div>
+          </Blk>
         )}
         {prev && grp.length > 0 && (
+          <Blk id="exec.diverge" label="광고그룹 클릭 증감" w={50}>
           <div className="ex-block">
             <h3>광고그룹 클릭 증감 <span className="hint">변화 큰 순 상위 {grp.length}개</span></h3>
             <Diverge rows={grp.map((g) => ({ name: g.name, d: g.d, p: g.p?.clk ?? 0, c: g.c?.clk ?? 0 }))} show={show} hide={hide} />
           </div>
+          </Blk>
         )}
-      </div>
 
-      {share.length >= 2 && (
+      {share.rows.length >= 2 && (
+        <Blk id="exec.share" label="광고비 대비 클릭 기여도">
         <div className="ex-block">
-          <h3>광고그룹별 광고비 대비 클릭 기여도 <span className="hint">당월 · 광고비 비중보다 클릭 비중이 크면 효율이 좋은 그룹</span></h3>
+          <h3>광고그룹별 광고비 대비 클릭 기여도 <span className="hint">당월 · 광고비가 있는 그룹끼리 비교</span></h3>
           <div className="ex-legend"><span><i style={{ background: COST_C }} />광고비 비중</span><span><i style={{ background: CLK_C }} />클릭 비중</span></div>
-          <ShareBars rows={share} show={show} hide={hide} />
+          <ShareBars rows={share.rows} show={show} hide={hide} />
+          <p className="hint ex-note">
+            판정 기준: 그룹의 클릭당 비용을 광고비가 있는 그룹 평균 <b>{n0(share.avgCpc)}원</b>과 비교 — 평균보다 10% 이상 싸면 <b>효율 우수</b>, 10% 이상 비싸면 <b>효율 낮음</b>, 그 사이는 <b>보통</b>
+            (= 클릭 비중이 광고비 비중의 1.1배 이상이면 우수, 0.9배 이하면 낮음).
+          </p>
+          {share.free.length > 0 && (
+            <p className="hint ex-note">
+              광고비 0원으로 집계된 그룹은 비교에서 뺐습니다 (브랜드검색처럼 정액 계약 상품은 클릭당 비용이 집계되지 않음):{' '}
+              {share.free.map((f) => `${f.name} 클릭 ${n0(f.clk)}건`).join(' · ')}
+            </p>
+          )}
         </div>
+        </Blk>
       )}
+      </Flow>
 
       {tip && <div className="ex-tip" style={{ left: tip.x + 14, top: tip.y + 10 }}>{tip.body}</div>}
     </section>
@@ -290,7 +321,7 @@ function ShareBars({ rows, show, hide }: { rows: { name: string; cost: number; c
       {rows.map((x, i) => {
         const y = 4 + i * ROW;
         const ratio = x.cs ? x.ks / x.cs : 0;
-        const verdict = ratio >= 1.1 ? { t: '효율 우수', c: '#1e7b34', bg: '#e6f4ea' } : ratio <= 0.9 ? { t: '효율 낮음', c: '#b3261e', bg: '#fdecea' } : { t: '보통', c: '#6b7280', bg: '#f1f3f5' };
+        const verdict = x.name.startsWith('기타 ') ? { t: '-', c: '#6b7280', bg: '#f1f3f5' } : ratio >= 1.1 ? { t: '효율 우수', c: '#1e7b34', bg: '#e6f4ea' } : ratio <= 0.9 ? { t: '효율 낮음', c: '#b3261e', bg: '#fdecea' } : { t: '보통', c: '#6b7280', bg: '#f1f3f5' };
         return (
           <g key={x.name} onMouseMove={(e) => show(e, <><b>{x.name}</b><br />광고비 {n0(x.cost)}원 ({x.cs.toFixed(1)}%)<br />클릭 {n0(x.clk)}건 ({x.ks.toFixed(1)}%)<br />클릭당 비용 {x.cpc == null ? '-' : `${n0(x.cpc)}원`}</>)} onMouseLeave={hide}>
             <rect x={0} y={y - 3} width={W} height={ROW - 2} fill="transparent" />
