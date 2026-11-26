@@ -33,6 +33,9 @@ export const SETTING_DEFS = {
     default:
       '진주:jinju.go.kr\n사천:sacheon.go.kr\n통영:tongyeong.go.kr\n거제:geoje.go.kr\n고성:goseong.go.kr\n남해:namhae.go.kr\n하동:hadong.go.kr\n산청:sancheong.go.kr\n함양:hygn.go.kr\n거창:geochang.go.kr\n합천:hc.go.kr\n의령:uiryeong.go.kr\n경남:gyeongnam.go.kr',
   },
+  ig_access_token: { label: '인스타그램 접근 토큰 (Meta · 서경방송 페이스북 페이지 관리자 계정으로 발급)', secret: true, default: '' },
+  ig_user_id: { label: '서경방송 인스타그램 비즈니스 계정 ID (숫자 · 비워 두면 연결 테스트가 찾아서 저장)', secret: false, default: '' },
+  ig_accounts: { label: '수집할 지자체 인스타그램 (지역:아이디, 줄마다 하나)', secret: false, default: '진주:jinjucity' },
   event_web_search_max: { label: '보고서 1건당 AI 웹 검색 최대 횟수 (1회 약 15원)', secret: false, default: '8' },
   region_list: { label: '지역 키워드 목록(쉼표 구분)', secret: false, default: '진주,사천,통영,거제,고성,남해,하동,산청,함양,거창,합천,의령' },
   brand_context: {

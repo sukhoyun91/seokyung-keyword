@@ -18,7 +18,7 @@ async function api(url: string, method = 'GET', body?: unknown) {
   return j;
 }
 
-const GROUPS: { title: string; desc?: string; keys: string[]; test?: 'claude' | 'naver' | 'hub' | 'tour' | 'gov' }[] = [
+const GROUPS: { title: string; desc?: string; keys: string[]; test?: 'claude' | 'naver' | 'hub' | 'tour' | 'gov' | 'instagram' }[] = [
   {
     title: 'Claude API (키워드 생성)',
     desc: 'console.anthropic.com 에서 발급한 API 키. 회사 결제 계정으로 발급하세요.',
@@ -42,6 +42,12 @@ const GROUPS: { title: string; desc?: string; keys: string[]; test?: 'claude' | 
     desc: 'TourAPI: 공공데이터포털(data.go.kr)에서 "한국관광공사_국문 관광정보 서비스_GW" 활용 신청 → 일반 인증키(Decoding). 지자체 웹사이트는 AI 웹 검색이 전국 정부·지자체 사이트(go.kr) 안에서 찾습니다. 문화재단·문화예술회관처럼 go.kr이 아닌 사이트는 "진주시:도메인" 형식으로 추가하세요 (한 지역 여러 줄 가능, 시·도 이름이나 "공통"도 가능).',
     keys: ['tour_api_key', 'event_default_sido', 'event_default_regions', 'gov_domains', 'event_web_search_max'],
     test: 'tour',
+  },
+  {
+    title: '지자체 인스타그램 (Meta Instagram API)',
+    desc: '서경방송 인스타그램 비즈니스 계정(페이스북 페이지 연결)의 토큰으로 지자체 공식 계정(비즈니스 계정)의 공개 게시물을 읽습니다. 인스타그램 비밀번호는 저장하지 않습니다. 토큰 발급 방법은 안내서를 보세요. 토큰을 넣고 저장 → 연결 테스트를 누르면 계정 ID를 찾아 저장하고 만료일을 알려 줍니다.',
+    keys: ['ig_access_token', 'ig_user_id', 'ig_accounts'],
+    test: 'instagram',
   },
   { title: 'AI 분석 기준', keys: ['brand_context', 'region_list'] },
   { title: '사용 한도', desc: 'AI 비용 관리용. 관리자 계정은 일일 한도가 적용되지 않습니다.', keys: ['daily_limit', 'max_keywords'] },
@@ -90,7 +96,7 @@ export default function AdminPanel({ meId }: { meId: number }) {
     setSettings(j.settings);
   }
 
-  async function test(target: 'claude' | 'naver' | 'hub' | 'tour' | 'gov') {
+  async function test(target: 'claude' | 'naver' | 'hub' | 'tour' | 'gov' | 'instagram') {
     setTestMsg((t) => ({ ...t, [target]: 'busy' }));
     try {
       const j = await api('/api/admin/test', 'POST', { target });
@@ -213,7 +219,7 @@ export default function AdminPanel({ meId }: { meId: number }) {
           {g.keys.map((k) => {
             const s = byKey(k);
             if (!s) return null;
-            const long = k === 'brand_context' || k === 'gov_domains';
+            const long = k === 'brand_context' || k === 'gov_domains' || k === 'ig_accounts';
             return (
               <div key={k}>
                 <label>

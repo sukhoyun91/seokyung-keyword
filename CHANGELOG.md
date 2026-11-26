@@ -10,6 +10,39 @@ GitHub 웹 업로드 시에는 각 버전의 **변경 파일**만 올리면 됩�
 
 ---
 
+## v1.11.0 — 2026-11-26 · 지역 행사 정보: 지자체 인스타그램 수집
+
+**새 기능**
+- 지역 행사 정보 수집 출처에 **지자체 인스타그램 (공식 계정 게시물)** 추가
+  - Meta 공식 Instagram API(Business Discovery)로 서경방송 비즈니스 계정 토큰을 써서 지자체 공식 계정(예: @jinjucity)의 공개 게시물을 읽음 (스크래핑 없음)
+  - 기간 시작 60일 전 ~ 기간 끝 게시물 중 행사 관련 글만 근거로 채택, AI 정리에 "지자체 공식 인스타그램"으로 전달
+  - 지자체 공식 계정 게시물은 공식 출처로 취급 (날짜 확인 시 "공식 확인")
+- 관리자 → **지자체 인스타그램 (Meta Instagram API)** 설정
+  - 접근 토큰(암호화 저장), 서경방송 인스타그램 계정 ID, 수집할 계정 목록(`진주:jinjucity` 형식)
+  - 연결 테스트: 토큰 확인 + 만료일 표시, 계정 ID 자동 찾기·저장, 첫 계정 게시물 읽기 시험
+- 토큰 만료·권한 부족·계정 아님·호출 한도 오류를 각각 안내
+- 연결 방법 안내서: `docs/인스타그램-연결-안내.md`
+
+**변경 파일**
+- `package.json`
+- `CHANGELOG.md`
+- `docs/인스타그램-연결-안내.md` (새 파일)
+- `lib/events/instagram.ts` (새 파일)
+- `lib/events/types.ts`
+- `lib/events/summarize.ts`
+- `lib/events/validate.ts`
+- `lib/settings.ts`
+- `app/api/events/route.ts`
+- `app/api/events/[id]/step/route.ts`
+- `app/api/admin/test/route.ts`
+- `app/events/page.tsx`
+- `app/components/events/EventsHome.tsx`
+- `app/components/events/EventReportView.tsx`
+- `app/components/AdminPanel.tsx`
+- `app/globals.css`
+
+---
+
 ## v1.10.2 — 2026-11-25 · 효율 그래프 교체
 
 **변경**

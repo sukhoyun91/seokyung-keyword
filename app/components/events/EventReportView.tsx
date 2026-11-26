@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../ads/fmt';
 import { KIND_LABEL, STEP_LABEL, TRUST_LABEL, type EvReport, type EvSource, type StepKey, type Trust } from '@/lib/events/types';
 
-const STEPS: StepKey[] = ['tour', 'std', 'gov', 'news', 'summarize'];
+const STEPS: StepKey[] = ['tour', 'std', 'gov', 'sns', 'news', 'summarize'];
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const TRUST_CLS: Record<Trust, string> = { official: 'low', cross: 'ai', check: 'mid' };
 
@@ -153,7 +153,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
           <span><b>작성일</b> {new Date(r.created_at).toLocaleDateString('ko-KR')} ({r.created_by_name})</span>
           <span><b>지역</b> {r.options?.sido ? `${r.options.sido} · ` : ''}{r.regions.length > 10 ? `${r.regions.slice(0, 10).join(', ')} 외 ${r.regions.length - 10}곳` : r.regions.join(', ')}</span>
           <span><b>검색어</b> {r.keywords.join(', ')}</span>
-          <span><b>수집 자료</b> 관광공사 {byKind('tour')} · 표준데이터 {byKind('std')} · 지자체 {byKind('gov')} · 뉴스 {byKind('news')}</span>
+          <span><b>수집 자료</b> 관광공사 {byKind('tour')} · 표준데이터 {byKind('std')} · 지자체 {byKind('gov')}{byKind('sns') > 0 ? ` · 인스타그램 ${byKind('sns')}` : ''} · 뉴스 {byKind('news')}</span>
         </div>
         <details className="collect-log no-print">
           <summary>수집 내역 보기</summary>
@@ -178,7 +178,7 @@ export default function EventReportView({ id, autoRun }: { id: number; autoRun: 
         <section className="rp-sec no-print">
           <h2>수집 진행</h2>
           <div className="steps">
-            {STEPS.filter((k) => k !== 'std' || r.steps.std).map((k) => {
+            {STEPS.filter((k) => (k !== 'std' && k !== 'sns') || r.steps[k]).map((k) => {
               const st = r.steps[k] ?? { status: 'pending' };
               const isRun = running === k;
               return (

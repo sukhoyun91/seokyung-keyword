@@ -5,15 +5,53 @@ import { fetchKeywordStats } from '@/lib/naver';
 import { findRank, parseAreas, EXPOSURE_AREAS, normalizeTarget } from '@/lib/exposure';
 import { collectTour, tourDiagText, collectStd, stdDiagText, collectGov, govDiagText, domainsFor } from '@/lib/events/sources';
 import { fetchSite } from '@/lib/site';
+import { inspectToken, expiryText, igAccountsFor, collectInstagram } from '@/lib/events/instagram';
+import { saveSetting } from '@/lib/settings';
 
 export const runtime = 'nodejs';
 
 /** body: { target: 'claude' | 'naver' | 'hub' } — 저장된 키로 연결 테스트 */
 export async function POST(req: Request) {
   try {
-    await requireAdmin();
+    const me = await requireAdmin();
     const { target } = await req.json();
     const s = await getSettings();
+    if (target === 'instagram') {
+      if (!s.ig_access_token) return Response.json({ ok: false, message: '인스타그램 접근 토큰을 먼저 저장하세요.' });
+      try {
+        const info = await inspectToken(s.ig_access_token);
+        const lines = [`토큰 확인: ${info.me.name || info.me.id} · ${expiryText(info.expiresAt)}`];
+        let igId = s.ig_user_id.trim();
+        if (!igId) {
+          if (info.accounts.length === 1) {
+            igId = info.accounts[0].id;
+            await saveSetting('ig_user_id', igId, me.id);
+            lines.push(`서경방송 인스타그램 계정을 찾아 저장했습니다: @${info.accounts[0].username} (ID ${igId}, 페이지 "${info.accounts[0].page}")`);
+          } else if (info.accounts.length > 1) {
+            return Response.json({ ok: false, message: `${lines[0]}\n연결된 인스타그램 계정이 여러 개입니다. 아래 중 서경방송 계정의 ID를 "계정 ID" 칸에 넣고 저장하세요:\n${info.accounts.map((a) => `@${a.username} → ${a.id} (페이지 "${a.page}")`).join('\n')}` });
+          } else {
+            return Response.json({ ok: false, message: `${lines[0]}\n이 토큰으로 볼 수 있는 페이스북 페이지에 연결된 인스타그램 비즈니스 계정이 없습니다. 토큰 발급 때 서경방송 페이지와 instagram_basic·pages_show_list·business_management 권한을 선택했는지 확인하세요.` });
+          }
+        }
+        const accounts = igAccountsFor(s.ig_accounts, s.event_default_regions.split(',').map((x) => x.trim()).filter(Boolean), s.event_default_sido);
+        const first = accounts[0] ?? igAccountsFor(s.ig_accounts, ['공통'], s.event_default_sido)[0];
+        if (!first) {
+          lines.push('수집할 지자체 인스타그램이 등록되지 않았습니다 (예: 진주:jinjucity).');
+          return Response.json({ ok: true, message: lines.join('\n') });
+        }
+        const end = new Date(Date.now() + 9 * 3600_000);
+        const start = new Date(end.getTime() - 30 * 86400000);
+        const ymd = (d: Date) => d.toISOString().slice(0, 10);
+        const out = await collectInstagram({ token: s.ig_access_token, igUserId: igId, accounts: [first], start: ymd(start), end: ymd(end), keywords: ['축제', '행사'] });
+        const a = out.diag.accounts[0];
+        if (a?.error) return Response.json({ ok: false, message: `${lines.join('\n')}\n@${first.username} 읽기 실패: ${a.error}` });
+        lines.push(`@${first.username} 읽기 성공 — 최근 게시물 ${a.read}개 중 최근 3개월 ${a.inWindow}개, 행사 관련 ${a.kept}개`);
+        if (out.sources[0]) lines.push(`예: ${out.sources[0].date} "${out.sources[0].title}"`);
+        return Response.json({ ok: true, message: lines.join('\n') });
+      } catch (e: any) {
+        return Response.json({ ok: false, message: `연결 실패: ${e?.message ?? e}` });
+      }
+    }
     if (target === 'claude') {
       if (!s.anthropic_api_key) return Response.json({ ok: false, message: 'Claude API 키가 저장되어 있지 않습니다.' });
       try {

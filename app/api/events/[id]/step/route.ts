@@ -3,6 +3,7 @@ import { getSettings } from '@/lib/settings';
 import { loadReport, saveFields } from '@/lib/events/store';
 import { collectTour, collectStd, collectNews, collectGov, domainsFor, tourDiagText, stdDiagText, govDiagText } from '@/lib/events/sources';
 import { fetchSite } from '@/lib/site';
+import { collectInstagram, igAccountsFor, igDiagText } from '@/lib/events/instagram';
 import { summarizeEvents } from '@/lib/events/summarize';
 import type { EvSource, StepKey } from '@/lib/events/types';
 
@@ -13,7 +14,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 /** 출처 번호 다시 매기기 (공식 → 지자체 → 뉴스 순) */
 function renumber(list: Omit<EvSource, 'id'>[]): EvSource[] {
-  const order = { tour: 0, std: 1, gov: 2, news: 3 } as const;
+  const order = { tour: 0, std: 1, gov: 2, sns: 3, news: 4 } as const;
   return [...list].sort((a, b) => order[a.kind] - order[b.kind]).map((s, i) => ({ ...s, id: `S${i + 1}` }));
 }
 
@@ -27,7 +28,7 @@ export async function POST(req: Request, { params }: Ctx) {
   try {
     await requireUser();
     step = (await req.json()).step as StepKey;
-    if (!['tour', 'std', 'news', 'gov', 'summarize'].includes(step)) throw new HttpError(400, '단계가 올바르지 않습니다.');
+    if (!['tour', 'std', 'news', 'gov', 'sns', 'summarize'].includes(step)) throw new HttpError(400, '단계가 올바르지 않습니다.');
     const r = await loadReport(id);
     const s = await getSettings();
     const steps = { ...r.steps, [step]: { status: 'running', at: new Date().toISOString() } };
@@ -89,6 +90,19 @@ export async function POST(req: Request, { params }: Ctx) {
       count = found.length;
       message = govDiagText(diag);
       await saveFields(id, { sources, steps: { ...steps, gov: { status: 'done', count, message, debug: diag, at: new Date().toISOString() } } });
+    } else if (step === 'sns') {
+      if (!s.ig_access_token || !s.ig_user_id) throw new HttpError(400, '인스타그램 토큰·계정 ID가 설정되지 않았습니다. 관리자 설정에서 입력하거나 이 출처를 끄세요.');
+      const accounts = igAccountsFor(s.ig_accounts, r.regions, r.options?.sido);
+      let found: Omit<EvSource, 'id'>[] = [];
+      if (!accounts.length) message = '선택한 지역에 등록된 인스타그램 계정이 없습니다 (관리자 설정 → 수집할 지자체 인스타그램).';
+      else {
+        const out = await collectInstagram({ token: s.ig_access_token, igUserId: s.ig_user_id, accounts, start: r.period_start, end: r.period_end, keywords: r.keywords });
+        found = out.sources;
+        message = igDiagText(out.diag);
+      }
+      const sources = renumber([...keep('sns'), ...found]);
+      count = found.length;
+      await saveFields(id, { sources, steps: { ...steps, sns: { status: 'done', count, message, at: new Date().toISOString() } } });
     } else {
       if (!s.anthropic_api_key) throw new HttpError(400, 'Claude API 키가 설정되지 않았습니다.');
       const result = await summarizeEvents({

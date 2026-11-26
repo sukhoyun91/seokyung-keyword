@@ -98,7 +98,7 @@ export function validateResult(raw: RawResult, sources: EvSource[], period: { st
     }
 
     // 신뢰도
-    const govSrc = srcs.some((s) => s.kind === 'gov' && /\.go\.kr$/.test(s.publisher));
+    const govSrc = srcs.some((s) => (s.kind === 'gov' && /\.go\.kr$/.test(s.publisher)) || s.kind === 'sns'); // 지자체 공식 인스타그램도 공식 출처
     const newsPublishers = new Set(srcs.filter((s) => s.kind === 'news').map((s) => s.publisher));
     let trust: Trust = 'check';
     if (tour) trust = 'official';

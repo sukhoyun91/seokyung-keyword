@@ -45,7 +45,7 @@ const TOOL: Anthropic.Messages.Tool = {
 };
 
 function sourceBlock(s: EvSource) {
-  const head = `[${s.id}] (${s.kind === 'tour' ? '관광공사 공식' : s.kind === 'std' ? `문화축제 표준데이터 ${s.publisher}` : s.kind === 'gov' ? `지자체 ${s.publisher}` : `뉴스 ${s.publisher}`}${s.date ? `, 게시 ${s.date}` : ''}) ${s.title}`;
+  const head = `[${s.id}] (${s.kind === 'tour' ? '관광공사 공식' : s.kind === 'std' ? `문화축제 표준데이터 ${s.publisher}` : s.kind === 'gov' ? `지자체 ${s.publisher}` : s.kind === 'sns' ? `지자체 공식 인스타그램 ${s.publisher}` : `뉴스 ${s.publisher}`}${s.date ? `, 게시 ${s.date}` : ''}) ${s.title}`;
   return `${head}\n${s.snippet}`.slice(0, 900);
 }
 

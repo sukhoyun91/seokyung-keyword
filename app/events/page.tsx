@@ -21,6 +21,7 @@ export default async function EventsPage() {
           std: Boolean(s.tour_api_key),
           news: Boolean(s.naver_hub_client_id && s.naver_hub_client_secret),
           gov: Boolean(s.anthropic_api_key && s.gov_domains.trim()),
+          sns: Boolean(s.ig_access_token && s.ig_user_id && s.ig_accounts.trim()),
           ai: Boolean(s.anthropic_api_key),
         }}
         isAdmin={user.role === 'admin'}

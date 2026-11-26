@@ -28,7 +28,7 @@ function monthRange(offset: number) {
   return { start: iso(s), end: iso(e), label: `${s.getUTCMonth() + 1}월` };
 }
 
-export default function EventsHome({ defaultSido, defaultRegions, ready, isAdmin, meId }: { defaultSido: string; defaultRegions: string[]; ready: { tour: boolean; std: boolean; news: boolean; gov: boolean; ai: boolean }; isAdmin: boolean; meId: number }) {
+export default function EventsHome({ defaultSido, defaultRegions, ready, isAdmin, meId }: { defaultSido: string; defaultRegions: string[]; ready: { tour: boolean; std: boolean; news: boolean; gov: boolean; sns: boolean; ai: boolean }; isAdmin: boolean; meId: number }) {
   const next = monthRange(1);
   const [title, setTitle] = useState('');
   const [start, setStart] = useState(next.start);
@@ -51,7 +51,7 @@ export default function EventsHome({ defaultSido, defaultRegions, ready, isAdmin
   const [useBase, setUseBase] = useState(true);
   const [kw, setKw] = useState<string[]>([]);
   const [kwInput, setKwInput] = useState('');
-  const [src, setSrc] = useState({ tour: ready.tour, std: ready.std, news: ready.news, gov: ready.gov });
+  const [src, setSrc] = useState({ tour: ready.tour, std: ready.std, news: ready.news, gov: ready.gov, sns: ready.sns });
   const [extra, setExtra] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -97,7 +97,7 @@ export default function EventsHome({ defaultSido, defaultRegions, ready, isAdmin
 
   const keywordsPreview = [...(useBase ? BASE_KEYWORDS : []), ...kw];
   const queries = sel.length * keywordsPreview.length;
-  const anySource = src.tour || src.std || src.news || src.gov;
+  const anySource = src.tour || src.std || src.news || src.gov || src.sns;
 
   return (
     <div className="container">
@@ -165,6 +165,7 @@ export default function EventsHome({ defaultSido, defaultRegions, ready, isAdmin
             ['tour', '관광공사 공식 축제 정보 (TourAPI)', ready.tour],
             ['std', '전국문화축제 표준데이터 (지자체 등록)', ready.std],
             ['gov', '지자체 웹사이트 (AI 웹 검색)', ready.gov],
+            ['sns', '지자체 인스타그램 (공식 계정 게시물)', ready.sns],
             ['news', '네이버 뉴스 기사', ready.news],
           ] as const).map(([k, label, ok]) => (
             <label key={k} className="check">

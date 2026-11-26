@@ -45,14 +45,15 @@ export async function POST(req: Request) {
     if (b.news !== false && regions.length * keywords.length > 160) {
       throw new HttpError(400, `뉴스 검색 조합이 너무 많습니다 (지역 ${regions.length} × 검색어 ${keywords.length}). 지역이나 검색어를 줄이세요 (160개 이하).`);
     }
-    const options = { tour: b.tour !== false, std: b.std !== false, news: b.news !== false, gov: b.gov !== false, extra: String(b.extra ?? '').slice(0, 500), sido: sido.name };
-    if (!options.tour && !options.std && !options.news && !options.gov) throw new HttpError(400, '수집 출처를 하나 이상 선택하세요.');
+    const options = { tour: b.tour !== false, std: b.std !== false, news: b.news !== false, gov: b.gov !== false, sns: b.sns === true, extra: String(b.extra ?? '').slice(0, 500), sido: sido.name };
+    if (!options.tour && !options.std && !options.news && !options.gov && !options.sns) throw new HttpError(400, '수집 출처를 하나 이상 선택하세요.');
     const title = String(b.title ?? '').trim().slice(0, 200) || `${b.start} ~ ${b.end} ${sido.short} ${regions.length === sido.regions.length ? '전체' : regions.length > 3 ? `${regions.slice(0, 3).join('·')} 외 ${regions.length - 3}곳` : regions.join('·')} 축제·행사 정보`;
     const steps: Record<string, unknown> = {
       tour: { status: options.tour ? 'pending' : 'skipped' },
       std: { status: options.std ? 'pending' : 'skipped' },
       news: { status: options.news ? 'pending' : 'skipped' },
       gov: { status: options.gov ? 'pending' : 'skipped' },
+      sns: { status: options.sns ? 'pending' : 'skipped' },
       summarize: { status: 'pending' },
     };
     const r = await query<{ id: number }>(

@@ -66,7 +66,7 @@ button.block { width: 100%; padding: 12px; font-size: 1rem; }
 .drop.over { border-color: var(--brand); background: var(--brand-soft); }
 .preview { margin-top: 10px; max-height: 260px; width: 100%; object-fit: contain; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
 
-.msg { padding: 10px 12px; border-radius: 8px; margin: 10px 0; font-size: .9rem; }
+.msg { padding: 10px 12px; border-radius: 8px; margin: 10px 0; font-size: .9rem; white-space: pre-line; }
 .msg.err { background: #fdecea; color: var(--err); }
 .msg.ok { background: #e7f6ee; color: var(--ok); }
 .msg.warn { background: #fff5e5; color: var(--warn); }

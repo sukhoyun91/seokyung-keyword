@@ -1,10 +1,11 @@
 /** 수집 출처 종류: 관광공사 공식 / 지자체 웹사이트 / 뉴스 */
-export type SourceKind = 'tour' | 'std' | 'gov' | 'news';
+export type SourceKind = 'tour' | 'std' | 'gov' | 'sns' | 'news';
 
 export const KIND_LABEL: Record<SourceKind, string> = {
   tour: '관광공사 TourAPI',
   std: '문화축제 표준데이터',
   gov: '지자체 웹사이트',
+  sns: '지자체 인스타그램',
   news: '뉴스',
 };
 
@@ -61,12 +62,13 @@ export interface EvResult {
   generatedAt: string;
 }
 
-export type StepKey = 'tour' | 'std' | 'news' | 'gov' | 'summarize';
+export type StepKey = 'tour' | 'std' | 'news' | 'gov' | 'sns' | 'summarize';
 export const STEP_LABEL: Record<StepKey, string> = {
   tour: '관광공사 공식 축제 정보',
   std: '전국문화축제 표준데이터 (지자체 등록)',
   news: '네이버 뉴스 기사',
   gov: '지자체 웹사이트 (AI 웹 검색)',
+  sns: '지자체 인스타그램',
   summarize: 'AI 정리 및 검증',
 };
 
@@ -85,7 +87,7 @@ export interface EvReport {
   period_end: string;
   regions: string[];
   keywords: string[];
-  options: { tour: boolean; std?: boolean; news: boolean; gov: boolean; extra: string; sido?: string };
+  options: { tour: boolean; std?: boolean; news: boolean; gov: boolean; sns?: boolean; extra: string; sido?: string };
   status: 'collecting' | 'done' | 'error';
   steps: Partial<Record<StepKey, StepState>>;
   sources: EvSource[];
