@@ -595,7 +595,8 @@ ${node.outerHTML}
           </Blk>
             {r.adGroups.groups.map((g) => (
               <Blk key={g.ad_group} id={`sec5.g.${g.ad_group}`} label={`그룹 ${g.ad_group}`} w={50}>
-                <TrendTable title={g.ad_group} sub={g.type} months={shown} cur={month} get={(m) => gs(g.ad_group, m)} prevMonth={r.prevMonth} />
+                <TrendTable title={g.ad_group} sub={g.type} months={shown} cur={month} get={(m) => gs(g.ad_group, m)} prevMonth={r.prevMonth}
+                  note={(m) => noteOf('group', g.ad_group, m)} onNote={(m, v) => saveRowNote('group', g.ad_group, m, v)} />
               </Blk>
             ))}
           </Flow>

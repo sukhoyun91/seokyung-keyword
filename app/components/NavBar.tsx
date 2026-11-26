@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { SessionUser } from '@/lib/auth';
 import { APP_VERSION, BUILD_ID } from '@/lib/version';
 
-export default function NavBar({ user, active }: { user: SessionUser; active: 'home' | 'admin' | 'resize' | 'data' | 'ads' | 'events' }) {
+export default function NavBar({ user, active }: { user: SessionUser; active: 'home' | 'keyword' | 'admin' | 'resize' | 'data' | 'ads' | 'events' }) {
   const [pwOpen, setPwOpen] = useState(false);
 
   async function logout() {
@@ -20,7 +20,7 @@ export default function NavBar({ user, active }: { user: SessionUser; active: 'h
             <small>마케팅 도구</small>
             <small className="ver" title={BUILD_ID ? `배포 ${BUILD_ID}` : ''}>v{APP_VERSION}</small>
           </a>
-          <a href="/" className={active === 'home' ? 'active' : ''}>키워드 분석</a>
+          <a href="/keyword" className={active === 'keyword' ? 'active' : ''}>키워드 분석</a>
           <a href="/resize" className={active === 'resize' ? 'active' : ''}>이미지 리사이징</a>
           <a href="/data" className={active === 'data' ? 'active' : ''}>원천자료 관리</a>
           <a href="/ads" className={active === 'ads' ? 'active' : ''}>검색광고 보고서</a>
