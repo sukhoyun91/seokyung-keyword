@@ -474,8 +474,12 @@ button.link { background: none; border: 0; padding: 0 4px; color: var(--brand); 
 .note-edit:empty::before { content: attr(data-ph); color: #c3cad6; }
 @media print { .note-edit:empty::before { content: ''; } }
 /* 매체 표: 광고그룹·매체 가로쓰기 */
-.rp-table.media-tbl td:nth-child(-n+2), .rp-table.media-tbl th:nth-child(-n+2), .rp-table.grp-tbl td:nth-child(-n+2) { white-space: nowrap; }
+.rp-table.grp-tbl td:nth-child(-n+2) { white-space: nowrap; }
+/* 매체 표: 긴 광고그룹 이름은 두 줄로, 매체 이름은 한 줄 (v1.12.1) */
 .rp-table.media-tbl td, .rp-table.media-tbl th { word-break: keep-all; }
+.rp-table.media-tbl td.grp-name { width: 160px; min-width: 120px; max-width: 170px; white-space: normal; line-height: 1.35; vertical-align: middle; }
+.rp-table.media-tbl td.grp-name + td, .rp-table.media-tbl tr:not(.grp-first) td:first-child { white-space: nowrap; }
+.rp-table.media-tbl tr.grp-first td { border-top: 1px solid #cfd6e0; }
 .blk-dragging { opacity: .45; }
 body.blk-moving, body.blk-moving * { cursor: grabbing !important; user-select: none !important; }
 .blk-grip { touch-action: none; }

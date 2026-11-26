@@ -602,14 +602,15 @@ ${node.outerHTML}
                   <tr><th>광고그룹</th><th>매체</th>{METRIC_HEADS.map((h) => <th key={h} className="num">{h}</th>)}<th className="num">전월 노출</th><th className="num">노출 증감</th><th className="num">전월 클릭</th><th className="num">클릭 증감</th><th className="num">전월 광고비</th><th className="num">광고비 증감</th></tr>
                 </thead>
                 <tbody>
-                  {mediaGroups.map((g) =>
-                    mediaNames(g).map((md, i) => {
+                  {mediaGroups.map((g) => {
+                    // 당월·전월 모두 자료가 없는 매체는 빼고, 남은 줄 수만큼 광고그룹 칸을 합침 (칸 밀림 방지)
+                    const rows = mediaNames(g).filter((md) => ms(g, md, month) || ms(g, md, r.prevMonth));
+                    return rows.map((md, i) => {
                       const c = ms(g, md, month);
                       const p = ms(g, md, r.prevMonth);
-                      if (!c && !p) return null;
                       return (
-                        <tr key={g + md}>
-                          {i === 0 && <td rowSpan={mediaNames(g).length}><b>{g}</b></td>}
+                        <tr key={g + md} className={i === 0 ? 'grp-first' : ''}>
+                          {i === 0 && <td rowSpan={rows.length} className="grp-name"><b>{g}</b></td>}
                           <td>{md}</td>
                           <MetricCells m={c} />
                           <td className="num muted-cell">{hasPrev ? n0(p?.imp ?? 0) : '-'}</td>
@@ -620,8 +621,8 @@ ${node.outerHTML}
                           <td className="num">{hasPrev ? <Delta cur={c?.cost ?? 0} prev={p?.cost ?? 0} /> : '-'}</td>
                         </tr>
                       );
-                    }),
-                  )}
+                    });
+                  })}
                 </tbody>
               </table>
             </div>
