@@ -20,7 +20,10 @@ export async function POST(req: Request) {
       if (!s.ig_access_token) return Response.json({ ok: false, message: '인스타그램 접근 토큰을 먼저 저장하세요.' });
       try {
         const info = await inspectToken(s.ig_access_token);
-        const lines = [`토큰 확인: ${info.me.name || info.me.id} · ${expiryText(info.expiresAt)}`];
+        const lines = [`토큰 확인: ${info.me.name || info.me.id} · ${expiryText(info.expiresAt)}${info.systemUser ? ' (시스템 사용자 토큰)' : ''}`];
+        if (info.missing && info.missing.length)
+          lines.push(`⚠ 빠진 권한: ${info.missing.join(', ')} — 비즈니스 설정 → 시스템 사용자 → 새 토큰 생성에서 이 권한을 체크해 다시 만드세요. 목록에 없으면 Meta 앱 대시보드 → 사용 사례 → Instagram 맞춤 설정에서 권한을 먼저 추가하세요.`);
+        else if (info.granted) lines.push(`권한 확인: 필요한 권한이 모두 있습니다.`);
         if (expiresSoon(info.expiresAt))
           lines.push('⚠ 곧 만료되는 단기 토큰입니다. 안내서 2-A(만료 없는 시스템 사용자 토큰)로 새로 만들거나, 액세스 토큰 디버거에서 "액세스 토큰 연장"을 눌러 받은 약 60일짜리 토큰으로 바꿔 저장하세요.');
         let igId = s.ig_user_id.trim();
@@ -37,7 +40,7 @@ export async function POST(req: Request) {
           } else if (info.accounts.length > 1) {
             return Response.json({ ok: false, message: `${lines.join('\n')}\n연결된 인스타그램 계정이 여러 개입니다. 아래 중 서경방송 계정의 ID를 "계정 ID" 칸에 넣고 저장하세요:\n${info.accounts.map((a) => `@${a.username} → ${a.id} (페이지 "${a.page}")`).join('\n')}` });
           } else {
-            return Response.json({ ok: false, message: `${lines.join('\n')}\n이 토큰으로 볼 수 있는 페이스북 페이지에 연결된 인스타그램 비즈니스 계정이 없습니다. 토큰 발급 때 서경방송 페이지와 instagram_basic·pages_show_list·business_management 권한을 선택했는지 확인하세요.` });
+            return Response.json({ ok: false, message: `${lines.join('\n')}\n이 토큰으로 볼 수 있는 페이스북 페이지에 연결된 인스타그램 비즈니스 계정이 없습니다. 토큰 발급 때 서경방송 페이지와 필요한 권한(instagram_basic, pages_show_list, business_management 등)을 선택했는지 확인하세요.` });
           }
         }
         const accounts = igAccountsFor(s.ig_accounts, s.event_default_regions.split(',').map((x) => x.trim()).filter(Boolean), s.event_default_sido);
