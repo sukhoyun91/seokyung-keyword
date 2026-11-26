@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { api, n0, rk } from './fmt';
+import { SortTh, sortRows, type Sort } from './sort';
 
 type Row = { keyword: string; month: string; imp: number; clk: number; cost: number; rank: number | null };
 type Metric = 'imp' | 'clk' | 'cost' | 'rank';
@@ -19,6 +20,7 @@ export default function KeywordPivot({ accountId, month, months }: { accountId: 
   const [metric, setMetric] = useState<Metric>('clk');
   const [q, setQ] = useState('');
   const [limit, setLimit] = useState(30);
+  const [sort, setSort] = useState<Sort>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -49,8 +51,9 @@ export default function KeywordPivot({ accountId, month, months }: { accountId: 
         return { keyword, ms, tot };
       })
       .sort((a, b) => b.tot - a.tot);
-    return list;
-  }, [rows, months, metric, q]);
+    const num = (r: Row | undefined) => (!r ? null : metric === 'rank' ? r.rank : r[metric]);
+    return sortRows(list, sort, (x, k) => (k === 'kw' ? x.keyword : k === 'tot' ? x.tot : num(x.ms.get(k))));
+  }, [rows, months, metric, q, sort]);
 
   const val = (r: Row | undefined) => {
     if (!r) return '';
@@ -77,14 +80,14 @@ export default function KeywordPivot({ accountId, month, months }: { accountId: 
         <table className="rp-table compact pivot">
           <thead>
             <tr>
-              <th className="sticky">키워드</th>
-              {months.map((m) => <th key={m} className={`num ${m === month ? 'cur-col' : ''}`}>{m.slice(2).replace('-', '.')}</th>)}
-              {metric !== 'rank' && <th className="num">합계</th>}
+              <SortTh label="키워드" k="kw" className="sticky" sort={sort} onSort={setSort} />
+              {months.map((m) => <SortTh key={m} label={m.slice(2).replace('-', '.')} k={m} className={`num ${m === month ? 'cur-col' : ''}`} sort={sort} onSort={setSort} />)}
+              {metric !== 'rank' && <SortTh label="합계" k="tot" className="num" sort={sort} onSort={setSort} />}
             </tr>
           </thead>
           <tbody>
-            {table.slice(0, limit).map((r) => (
-              <tr key={r.keyword}>
+            {table.map((r, i) => (
+              <tr key={r.keyword} className={i >= limit ? 'more-row' : ''}>
                 <td className="sticky"><b>{r.keyword}</b></td>
                 {months.map((m) => <td key={m} className={`num ${m === month ? 'cur-col' : ''}`}>{val(r.ms.get(m))}</td>)}
                 {metric !== 'rank' && <td className="num"><b>{n0(r.tot)}</b></td>}
@@ -94,7 +97,11 @@ export default function KeywordPivot({ accountId, month, months }: { accountId: 
         </table>
       </div>
       {table.length > limit && (
-        <button className="no-print" style={{ marginTop: 8 }} onClick={() => setLimit((l) => l + 50)}>더 보기 ({table.length - limit}개 남음)</button>
+        <div className="btn-row no-print" style={{ marginTop: 8, alignItems: 'center' }}>
+          <button onClick={() => setLimit((l) => l + 50)}>더 보기 ({table.length - limit}개 남음)</button>
+          <button onClick={() => setLimit(table.length)}>전체 보기</button>
+          <span className="hint">인쇄·PDF·HTML에는 전체 {table.length}개가 모두 나옵니다.</span>
+        </div>
       )}
       <p className="hint">평균노출순위는 숫자가 작을수록 위에 노출됩니다. 정렬은 표시 기간 합계 기준(순위는 노출수 기준)입니다.</p>
     </>

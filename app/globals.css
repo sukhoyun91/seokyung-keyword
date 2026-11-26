@@ -483,3 +483,17 @@ button.link { background: none; border: 0; padding: 0 4px; color: var(--brand); 
 .blk-dragging { opacity: .45; }
 body.blk-moving, body.blk-moving * { cursor: grabbing !important; user-select: none !important; }
 .blk-grip { touch-action: none; }
+
+/* v1.12.2 정렬 머리글 · 키워드 누적 추이 전체 출력 */
+.rp-table th.sortable { cursor: pointer; user-select: none; }
+.rp-table th .th-in { display: inline-flex; align-items: center; gap: 4px; }
+.rp-table th.num .th-in { justify-content: flex-end; }
+.sort-ic { display: inline-flex; flex-direction: column; line-height: 1; }
+.sort-ic i { font-style: normal; font-size: 8px; opacity: .35; padding: 0 1px; cursor: pointer; }
+.sort-ic i:hover { opacity: .8; }
+.sort-ic i.on { opacity: 1; color: #ffd24d; }
+.pivot tr.more-row { display: none; }
+@media print {
+  .pivot tr.more-row { display: table-row; }
+  .pivot-wrap { max-height: none !important; overflow: visible !important; }
+}

@@ -91,3 +91,4 @@ export function DeltaRows({ cur, prev, label = '전월 대비 ', rank = true, le
     </>
   );
 }
+

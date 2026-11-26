@@ -6,6 +6,7 @@ import TrendChart from './TrendChart';
 import KeywordPivot from './KeywordPivot';
 import ExecDashboard from './ExecDashboard';
 import { Blk, Flow, LayoutProvider, useLayoutState, type LayoutMap } from './Layout';
+import { SortTh, sortRows, mval, METRIC_KEYS, type Sort } from './sort';
 
 const sumM = (list: M[]): M => {
   const imp = list.reduce((a, b) => a + b.imp, 0);
@@ -36,6 +37,8 @@ body { background: #fff; margin: 0; padding: 0; font-size: 10.5pt; }
 .report .kpi-v { font-size: 14pt; } .report .ex-tv { font-size: 14pt; } .report .ex-headline { font-size: 11pt; }
 .report .opinion-print { white-space: pre-wrap; line-height: 1.7; font-size: 10.5pt; }
 .report .note-edit:empty::before { content: ''; }
+.report .pivot tr.more-row { display: table-row; }
+.report .pivot-wrap { max-height: none; overflow: visible; }
 .report .table-wrap { overflow-x: auto; }
 .html-foot { color: #8a93a3; font-size: 9pt; text-align: center; margin: 14px auto 0; width: 750px; }
 `;
@@ -129,6 +132,7 @@ export default function AdReportView({ accountId, month, userName }: { accountId
   const [saved, setSaved] = useState<LayoutMap>({});
   const [rowNotes, setRowNotes] = useState<Record<string, string>>({});
   const [labelTick, setLabelTick] = useState(0);
+  const [sorts, setSorts] = useState<Record<string, Sort>>({});
   const labelsRef = useRef(new Map<string, string>());
 
   async function load() {
@@ -311,7 +315,14 @@ ${node.outerHTML}
   const prev = tot(r.prevMonth);
   const hasPrev = Boolean(prev);
   const [yy, mm] = month.split('-');
-  const kwList = r.keywords.filter((k) => !kwGroup || k.ad_group === kwGroup);
+  // 표 정렬 상태 (표마다)
+  const S = (id: string) => ({ sort: sorts[id] ?? null, onSort: (v: Sort) => setSorts((x) => ({ ...x, [id]: v })) });
+  const metricThs = (id: string, n = 6) => METRIC_HEADS.slice(0, n).map((h, i) => <SortTh key={h} label={h} k={METRIC_KEYS[i]} className="num" {...S(id)} />);
+  const kwList = sortRows(
+    r.keywords.filter((k) => !kwGroup || k.ad_group === kwGroup),
+    sorts.sec7 ?? null,
+    (k, key) => (key === 'group' ? k.ad_group : key === 'kw' ? k.keyword : key === 'pclk' ? k.prevClk : key === 'dclk' ? k.clk - k.prevClk : key === 'pcost' ? k.prevCost : key === 'dcost' ? k.cost - k.prevCost : mval(k, key)),
+  );
   const kwShown = kwAll ? kwList : kwList.slice(0, 30);
   const kwGroups = [...new Set(r.keywords.map((k) => k.ad_group))];
   const curTypes = r.campaignTypes.types.filter((t) => cs(t, month) || cs(t, r.prevMonth));
@@ -503,10 +514,10 @@ ${node.outerHTML}
           <div className="table-wrap">
             <table className="rp-table">
               <thead>
-                <tr><th>기간</th>{METRIC_HEADS.slice(0, 5).map((h) => <th key={h} className="num">{h}</th>)}<th className="num">세금계산서</th><th className="num">쿠폰사용</th><th>비고</th></tr>
+                <tr><SortTh label="기간" k="m" {...S('sec3')} />{metricThs('sec3', 5)}<SortTh label="세금계산서" k="tax" className="num" {...S('sec3')} /><SortTh label="쿠폰사용" k="coupon" className="num" {...S('sec3')} /><SortTh label="비고" k="note" {...S('sec3')} /></tr>
               </thead>
               <tbody>
-                {shown.map((m) => {
+                {sortRows(shown, sorts.sec3 ?? null, (m, k) => (k === 'm' ? m : k === 'tax' ? tot(m)?.tax_invoice : k === 'coupon' ? tot(m)?.coupon : k === 'note' ? tot(m)?.note : mval(tot(m), k))).map((m) => {
                   const t = tot(m)!;
                   return (
                     <tr key={m} className={m === month ? 'cur' : ''}>
@@ -554,10 +565,13 @@ ${node.outerHTML}
           <div className="table-wrap">
             <table className="rp-table grp-tbl">
               <thead>
-                <tr><th>캠페인 유형</th><th>광고그룹</th>{METRIC_HEADS.map((h) => <th key={h} className="num">{h}</th>)}<th className="num">하루예산</th><th>지역타겟</th><th className="note-h">비고</th></tr>
+                <tr><SortTh label="캠페인 유형" k="type" {...S('sec5')} /><SortTh label="광고그룹" k="group" {...S('sec5')} />{metricThs('sec5')}<SortTh label="하루예산" k="budget" className="num" {...S('sec5')} /><SortTh label="지역타겟" k="region" {...S('sec5')} /><SortTh label="비고" k="note" className="note-h" {...S('sec5')} /></tr>
               </thead>
               <tbody>
-                {grpCur.map(({ g, c }) => {
+                {sortRows(grpCur, sorts.sec5 ?? null, ({ g, c }, k) => {
+                  const st = r.adGroups.settings.find((x) => x.ad_group === g.ad_group);
+                  return k === 'type' ? g.type || g.campaign : k === 'group' ? g.ad_group : k === 'budget' ? st?.daily_budget : k === 'region' ? st?.region_target : k === 'note' ? noteOf('group', g.ad_group, month) : mval(c, k);
+                }).map(({ g, c }) => {
                   const st = r.adGroups.settings.find((x) => x.ad_group === g.ad_group);
                   return (
                     <tr key={g.ad_group}>
@@ -599,18 +613,29 @@ ${node.outerHTML}
             <div className="table-wrap">
               <table className="rp-table media-tbl">
                 <thead>
-                  <tr><th>광고그룹</th><th>매체</th>{METRIC_HEADS.map((h) => <th key={h} className="num">{h}</th>)}<th className="num">전월 노출</th><th className="num">노출 증감</th><th className="num">전월 클릭</th><th className="num">클릭 증감</th><th className="num">전월 광고비</th><th className="num">광고비 증감</th></tr>
+                  <tr><SortTh label="광고그룹" k="group" {...S('sec6')} /><SortTh label="매체" k="media" {...S('sec6')} />{metricThs('sec6')}<SortTh label="전월 노출" k="pimp" className="num" {...S('sec6')} /><SortTh label="노출 증감" k="dimp" className="num" {...S('sec6')} /><SortTh label="전월 클릭" k="pclk" className="num" {...S('sec6')} /><SortTh label="클릭 증감" k="dclk" className="num" {...S('sec6')} /><SortTh label="전월 광고비" k="pcost" className="num" {...S('sec6')} /><SortTh label="광고비 증감" k="dcost" className="num" {...S('sec6')} /></tr>
                 </thead>
                 <tbody>
-                  {mediaGroups.map((g) => {
+                  {(() => {
                     // 당월·전월 모두 자료가 없는 매체는 빼고, 남은 줄 수만큼 광고그룹 칸을 합침 (칸 밀림 방지)
-                    const rows = mediaNames(g).filter((md) => ms(g, md, month) || ms(g, md, r.prevMonth));
-                    return rows.map((md, i) => {
+                    // 정렬하면 줄마다 광고그룹 이름을 따로 표시
+                    const all = mediaGroups.flatMap((g) => mediaNames(g).filter((md) => ms(g, md, month) || ms(g, md, r.prevMonth)).map((md) => ({ g, md })));
+                    const st6 = sorts.sec6 ?? null;
+                    const val6 = ({ g, md }: { g: string; md: string }, k: string) => {
+                      const c = ms(g, md, month), p = ms(g, md, r.prevMonth);
+                      const d = (f: 'imp' | 'clk' | 'cost') => (c?.[f] ?? 0) - (p?.[f] ?? 0);
+                      return k === 'group' ? g : k === 'media' ? md : k === 'pimp' ? p?.imp ?? 0 : k === 'dimp' ? d('imp') : k === 'pclk' ? p?.clk ?? 0 : k === 'dclk' ? d('clk') : k === 'pcost' ? p?.cost ?? 0 : k === 'dcost' ? d('cost') : mval(c, k);
+                    };
+                    const list = sortRows(all, st6, val6);
+                    return list.map(({ g, md }, idx) => {
+                      const grouped = !st6 || st6.k === 'group';
+                      const span = grouped ? list.filter((x) => x.g === g).length : 1;
+                      const i = grouped ? list.slice(0, idx).filter((x) => x.g === g).length : 0;
                       const c = ms(g, md, month);
                       const p = ms(g, md, r.prevMonth);
                       return (
                         <tr key={g + md} className={i === 0 ? 'grp-first' : ''}>
-                          {i === 0 && <td rowSpan={rows.length} className="grp-name"><b>{g}</b></td>}
+                          {i === 0 && <td rowSpan={span} className="grp-name"><b>{g}</b></td>}
                           <td>{md}</td>
                           <MetricCells m={c} />
                           <td className="num muted-cell">{hasPrev ? n0(p?.imp ?? 0) : '-'}</td>
@@ -622,7 +647,7 @@ ${node.outerHTML}
                         </tr>
                       );
                     });
-                  })}
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -661,7 +686,7 @@ ${node.outerHTML}
             <div className="table-wrap">
               <table className="rp-table">
                 <thead>
-                  <tr><th>광고그룹</th><th>키워드</th>{METRIC_HEADS.map((h) => <th key={h} className="num">{h}</th>)}<th className="num">전월 클릭</th><th className="num">클릭 증감</th><th className="num">전월 광고비</th><th className="num">광고비 증감</th></tr>
+                  <tr><SortTh label="광고그룹" k="group" {...S('sec7')} /><SortTh label="키워드" k="kw" {...S('sec7')} />{metricThs('sec7')}<SortTh label="전월 클릭" k="pclk" className="num" {...S('sec7')} /><SortTh label="클릭 증감" k="dclk" className="num" {...S('sec7')} /><SortTh label="전월 광고비" k="pcost" className="num" {...S('sec7')} /><SortTh label="광고비 증감" k="dcost" className="num" {...S('sec7')} /></tr>
                 </thead>
                 <tbody>
                   {kwShown.map((k) => (
@@ -760,10 +785,10 @@ ${node.outerHTML}
             <div className="table-wrap">
               <table className="rp-table">
                 <thead>
-                  <tr><th>광고그룹</th><th>검색어</th><th>검색유형</th>{METRIC_HEADS.slice(0, 5).map((h) => <th key={h} className="num">{h}</th>)}<th className="num">전월 클릭</th><th className="num">클릭 증감</th></tr>
+                  <tr><SortTh label="광고그룹" k="group" {...S('sec9')} /><SortTh label="검색어" k="term" {...S('sec9')} /><SortTh label="검색유형" k="type" {...S('sec9')} />{metricThs('sec9', 5)}<SortTh label="전월 클릭" k="pclk" className="num" {...S('sec9')} /><SortTh label="클릭 증감" k="dclk" className="num" {...S('sec9')} /></tr>
                 </thead>
                 <tbody>
-                  {r.searchTerms.top.slice(0, 30).map((s) => (
+                  {sortRows(r.searchTerms.top.slice(0, 30), sorts.sec9 ?? null, (s, k) => (k === 'group' ? s.ad_group : k === 'term' ? s.term : k === 'type' ? s.search_type : k === 'pclk' ? s.prevClk : k === 'dclk' ? s.clk - s.prevClk : mval(s, k))).map((s) => (
                     <tr key={s.ad_group + s.term + s.search_type}>
                       <td>{s.ad_group}</td><td><b>{s.term}</b></td><td>{s.search_type}</td>
                       <MetricCells m={s} rank={false} />
@@ -848,14 +873,16 @@ function PeriodBlock({ label, rows, total }: { label: string; rows: { name: stri
 }
 
 function TrendTable({ title, sub, months, cur, get, prevMonth, note, onNote }: { title: string; sub?: string; months: string[]; cur: string; get: (m: string) => M | undefined; prevMonth: string; note?: (m: string) => string; onNote?: (m: string, v: string) => void }) {
-  const rows = months.filter((m) => get(m));
-  if (!rows.length) return null;
+  const [sort, setSort] = useState<Sort>(null);
+  const base = months.filter((m) => get(m));
+  if (!base.length) return null;
+  const rows = sortRows(base, sort, (m, k) => (k === 'm' ? m : k === 'note' ? note?.(m) : mval(get(m), k)));
   return (
     <div className="trend-card">
       <h3>{title} {sub && <span className="hint">{sub}</span>}</h3>
       <div className="table-wrap">
         <table className="rp-table compact">
-          <thead><tr><th>기간</th>{METRIC_HEADS.map((h) => <th key={h} className="num">{h}</th>)}{note && <th className="note-h">비고</th>}</tr></thead>
+          <thead><tr><SortTh label="기간" k="m" sort={sort} onSort={setSort} />{METRIC_HEADS.map((h, i) => <SortTh key={h} label={h} k={METRIC_KEYS[i]} className="num" sort={sort} onSort={setSort} />)}{note && <SortTh label="비고" k="note" className="note-h" sort={sort} onSort={setSort} />}</tr></thead>
           <tbody>
             {rows.map((m) => (
               <tr key={m} className={m === cur ? 'cur' : ''}>
