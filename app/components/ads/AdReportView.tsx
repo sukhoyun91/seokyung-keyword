@@ -607,43 +607,32 @@ ${node.outerHTML}
       {mediaGroups.length > 0 && (
         <Blk id="sec6" label="6. 검색/콘텐츠 매체 현황">
         <section className="rp-sec">
-          <h2><span className="no">6</span>광고그룹별 검색/콘텐츠 매체 현황</h2>
+          <h2><span className="no">6</span>광고그룹별 검색/콘텐츠 매체 현황 <span className="hint">{monthLabel(month)}</span></h2>
           <Flow>
           <Blk id="sec6.table" label="매체 표">
             <div className="table-wrap">
               <table className="rp-table media-tbl">
                 <thead>
-                  <tr><SortTh label="광고그룹" k="group" {...S('sec6')} /><SortTh label="매체" k="media" {...S('sec6')} />{metricThs('sec6')}<SortTh label="전월 노출" k="pimp" className="num" {...S('sec6')} /><SortTh label="노출 증감" k="dimp" className="num" {...S('sec6')} /><SortTh label="전월 클릭" k="pclk" className="num" {...S('sec6')} /><SortTh label="클릭 증감" k="dclk" className="num" {...S('sec6')} /><SortTh label="전월 광고비" k="pcost" className="num" {...S('sec6')} /><SortTh label="광고비 증감" k="dcost" className="num" {...S('sec6')} /></tr>
+                  <tr><SortTh label="광고그룹" k="group" {...S('sec6')} /><SortTh label="매체" k="media" {...S('sec6')} />{metricThs('sec6')}</tr>
                 </thead>
                 <tbody>
                   {(() => {
-                    // 당월·전월 모두 자료가 없는 매체는 빼고, 남은 줄 수만큼 광고그룹 칸을 합침 (칸 밀림 방지)
+                    // 당월 자료가 있는 매체만, 그 줄 수만큼 광고그룹 칸을 합침 (칸 밀림 방지)
                     // 정렬하면 줄마다 광고그룹 이름을 따로 표시
-                    const all = mediaGroups.flatMap((g) => mediaNames(g).filter((md) => ms(g, md, month) || ms(g, md, r.prevMonth)).map((md) => ({ g, md })));
+                    const all = mediaGroups.flatMap((g) => mediaNames(g).filter((md) => ms(g, md, month)).map((md) => ({ g, md })));
                     const st6 = sorts.sec6 ?? null;
-                    const val6 = ({ g, md }: { g: string; md: string }, k: string) => {
-                      const c = ms(g, md, month), p = ms(g, md, r.prevMonth);
-                      const d = (f: 'imp' | 'clk' | 'cost') => (c?.[f] ?? 0) - (p?.[f] ?? 0);
-                      return k === 'group' ? g : k === 'media' ? md : k === 'pimp' ? p?.imp ?? 0 : k === 'dimp' ? d('imp') : k === 'pclk' ? p?.clk ?? 0 : k === 'dclk' ? d('clk') : k === 'pcost' ? p?.cost ?? 0 : k === 'dcost' ? d('cost') : mval(c, k);
-                    };
+                    const val6 = ({ g, md }: { g: string; md: string }, k: string) => (k === 'group' ? g : k === 'media' ? md : mval(ms(g, md, month), k));
                     const list = sortRows(all, st6, val6);
                     return list.map(({ g, md }, idx) => {
                       const grouped = !st6 || st6.k === 'group';
                       const span = grouped ? list.filter((x) => x.g === g).length : 1;
                       const i = grouped ? list.slice(0, idx).filter((x) => x.g === g).length : 0;
                       const c = ms(g, md, month);
-                      const p = ms(g, md, r.prevMonth);
                       return (
                         <tr key={g + md} className={i === 0 ? 'grp-first' : ''}>
                           {i === 0 && <td rowSpan={span} className="grp-name"><b>{g}</b></td>}
                           <td>{md}</td>
                           <MetricCells m={c} />
-                          <td className="num muted-cell">{hasPrev ? n0(p?.imp ?? 0) : '-'}</td>
-                          <td className="num">{hasPrev ? <Delta cur={c?.imp ?? 0} prev={p?.imp ?? 0} /> : '-'}</td>
-                          <td className="num muted-cell">{hasPrev ? n0(p?.clk ?? 0) : '-'}</td>
-                          <td className="num">{hasPrev ? <Delta cur={c?.clk ?? 0} prev={p?.clk ?? 0} /> : '-'}</td>
-                          <td className="num muted-cell">{hasPrev ? n0(p?.cost ?? 0) : '-'}</td>
-                          <td className="num">{hasPrev ? <Delta cur={c?.cost ?? 0} prev={p?.cost ?? 0} /> : '-'}</td>
                         </tr>
                       );
                     });
